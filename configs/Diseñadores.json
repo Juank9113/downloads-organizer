@@ -1,0 +1,10 @@
+{
+    "categories": {
+        "Assets_Imagenes": [".png", ".jpg", ".jpeg", ".webp"],
+        "Proyectos_PSD": [".psd"],
+        "Vectoriales": [".ai", ".svg", ".eps"],
+        "Mockups": [".fig", ".sketch"],
+        "Fuentes": [".ttf", ".otf", ".woff"],
+        "Videos_Borrador": [".mp4", ".mov"]
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/Backups",
+    "log_level": "INFO",
+    "notifications": true,
+    "auto_clean": false,
+    "exclude_extensions": [".tmp", ".crdownload"],
+    "categories": {
+        "01_Backups_Base_Datos": [".sql", ".dump", ".backup", ".psql"],
+        "02_Backups_Comprimidos": [".tar", ".gz", ".bz2", ".xz", ".zst"],
+        "03_Archivos_ZIP": [".zip", ".7z", ".rar", ".arj", ".lzh"],
+        "04_Backups_Configuracion": [".conf", ".config", ".ini", ".bak", ".old"],
+        "05_Imagenes_Disco": [".iso", ".img", ".dmg", ".vhd", ".vmdk"],
+        "06_Backups_Nube": [".tar.gz", ".tgz", ".tbz2"],
+        "07_Instaladores": [".exe", ".msi", ".dmg", ".deb", ".rpm", ".pkg"],
+        "99_Otros_Respaldos": []
+    }
+}

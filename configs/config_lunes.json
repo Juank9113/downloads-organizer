@@ -1,0 +1,17 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/Trabajo",
+    "log_level": "INFO",
+    "notifications": true,
+    "auto_clean": false,
+    "exclude_extensions": [".tmp", ".crdownload", ".part"],
+    "categories": {
+        "01_Documentos_Trabajo": [".pdf", ".docx", ".doc", ".txt", ".rtf"],
+        "02_Facturas": [".pdf", ".xml", ".xls", ".xlsx"],
+        "03_Contratos": [".docx", ".pdf", ".odt"],
+        "04_Reportes": [".xlsx", ".csv", ".txt", ".tsv"],
+        "05_Presentaciones": [".pptx", ".ppt", ".key"],
+        "06_Correos": [".eml", ".msg", ".pst"],
+        "99_Archivos_Temporales": []
+    }
+}

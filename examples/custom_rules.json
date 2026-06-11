@@ -1,0 +1,106 @@
+{
+  "downloads_dir": "~/Downloads",
+  "organized_dir": "~/Downloads_Organized",
+  "log_level": "INFO",
+  "notifications": true,
+  "auto_clean": false,
+  "clean_days": 30,
+  "exclude_extensions": [
+    ".tmp",
+    ".temp",
+    ".crdownload",
+    ".part",
+    ".download"
+  ],
+  "categories": {
+    "01_Imagenes": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".svg",
+      ".webp",
+      ".ico"
+    ],
+    "02_Documentos": [
+      ".pdf",
+      ".docx",
+      ".doc",
+      ".txt",
+      ".xlsx",
+      ".pptx",
+      ".odt",
+      ".rtf",
+      ".md"
+    ],
+    "03_Videos": [
+      ".mp4",
+      ".avi",
+      ".mkv",
+      ".mov",
+      ".wmv",
+      ".flv",
+      ".webm",
+      ".m4v"
+    ],
+    "04_Musica": [
+      ".mp3",
+      ".wav",
+      ".flac",
+      ".aac",
+      ".ogg",
+      ".m4a",
+      ".wma"
+    ],
+    "05_Archivos_Comprimidos": [
+      ".zip",
+      ".rar",
+      ".tar",
+      ".gz",
+      ".7z",
+      ".bz2",
+      ".xz"
+    ],
+    "06_Programas": [
+      ".exe",
+      ".msi",
+      ".dmg",
+      ".pkg",
+      ".deb",
+      ".rpm",
+      ".AppImage"
+    ],
+    "07_Codigo": [
+      ".py",
+      ".js",
+      ".html",
+      ".css",
+      ".cpp",
+      ".java",
+      ".json",
+      ".xml",
+      ".yaml",
+      ".yml",
+      ".sh",
+      ".bash"
+    ],
+    "08_Trabajo": [
+      ".pptx",
+      ".xlsx",
+      ".docx",
+      ".pdf"
+    ],
+    "09_Proyectos": [
+      ".prproj",
+      ".aep",
+      ".fcpxml",
+      ".blend"
+    ],
+    "10_Backups": [
+      ".bak",
+      ".backup",
+      ".old"
+    ]
+  }
+}

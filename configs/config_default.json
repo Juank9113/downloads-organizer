@@ -1,0 +1,19 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/General",
+    "log_level": "INFO",
+    "notifications": true,
+    "auto_clean": false,
+    "exclude_extensions": [".tmp", ".crdownload", ".part"],
+    "categories": {
+        "01_Imagenes": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".ico"],
+        "02_Documentos": [".pdf", ".docx", ".doc", ".txt", ".xlsx", ".pptx", ".odt", ".rtf", ".md"],
+        "03_Videos": [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"],
+        "04_Musica": [".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"],
+        "05_Programas": [".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".AppImage", ".sh"],
+        "06_Archivos_Comprimidos": [".zip", ".rar", ".tar", ".gz", ".7z", ".bz2", ".xz"],
+        "07_Codigo": [".py", ".js", ".html", ".css", ".cpp", ".java", ".json", ".xml", ".yaml", ".yml"],
+        "08_Respaldos": [".bak", ".backup", ".old"],
+        "99_Otros": []
+    }
+}

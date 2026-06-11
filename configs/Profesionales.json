@@ -1,0 +1,9 @@
+{
+    "categories": {
+        "Clientes_Facturas": [".pdf", ".xlsx"],
+        "Contratos": [".docx", ".pdf"],
+        "Recursos_Graficos": [".psd", ".ai", ".eps"],
+        "Reuniones_Minutas": [".txt", ".md"],
+        "Backups": [".zip", ".rar", ".7z"]
+    }
+}

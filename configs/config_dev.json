@@ -1,0 +1,21 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/Desarrollo",
+    "log_level": "DEBUG",
+    "notifications": true,
+    "auto_clean": false,
+    "exclude_extensions": [".tmp", ".crdownload", ".pyc", ".class"],
+    "categories": {
+        "01_Python": [".py", ".pyw", ".pyi", ".ipynb", ".pyx"],
+        "02_JavaScript": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+        "03_Web_Frontend": [".html", ".htm", ".css", ".scss", ".sass", ".less"],
+        "04_Web_Backend": [".php", ".go", ".rb", ".java", ".scala"],
+        "05_Config_Files": [".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env"],
+        "06_Bases_Datos": [".sql", ".db", ".sqlite", ".dump", ".backup"],
+        "07_Docker": ["Dockerfile", ".dockerignore", "docker-compose.yml"],
+        "08_Documentacion": [".md", ".rst", ".txt", ".wiki"],
+        "09_Compilados": [".exe", ".bin", ".out", ".o"],
+        "10_Archivos_Proyecto": [".gitignore", ".editorconfig", ".prettierrc"],
+        "99_Otros_Codigo": []
+    }
+}

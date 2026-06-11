@@ -1,0 +1,18 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/Limpieza",
+    "log_level": "INFO",
+    "notifications": true,
+    "auto_clean": true,
+    "clean_days": 7,
+    "exclude_extensions": [".crdownload"],
+    "categories": {
+        "01_Temporales": [".tmp", ".temp", ".cache", ".swp", ".swo", "~"],
+        "02_Logs": [".log", ".out", ".error", ".trace"],
+        "03_Archivos_Viejos": [".old", ".bak", ".backup", ".orig"],
+        "04_Duplicados": ["_copy", "_backup", "_old", "_1", "_2"],
+        "05_Instaladores_Temporales": [".exe.part", ".msi.part", ".download"],
+        "06_Cache_Navegador": [".dat", ".bin", ".manifest"],
+        "99_Archivos_Pendientes": []
+    }
+}

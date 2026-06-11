@@ -1,0 +1,11 @@
+{
+    "categories": {
+        "Python": [".py", ".pyw", ".pyi", ".ipynb"],
+        "JavaScript_TS": [".js", ".jsx", ".ts", ".tsx"],
+        "Web_Assets": [".html", ".css", ".scss", ".sass"],
+        "Config_Files": [".json", ".yaml", ".yml", ".toml", ".ini"],
+        "Bases_Datos": [".sql", ".db", ".sqlite"],
+        "Docker": ["Dockerfile", ".dockerignore"],
+        "Compilados": [".exe", ".bin", ".out"]
+    }
+}

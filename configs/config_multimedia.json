@@ -1,0 +1,19 @@
+{
+    "downloads_dir": "~/Downloads",
+    "organized_dir": "~/Downloads_Organized/Multimedia",
+    "log_level": "INFO",
+    "notifications": true,
+    "auto_clean": false,
+    "exclude_extensions": [".tmp", ".crdownload", ".part"],
+    "categories": {
+        "01_Videos_4K": [".mp4", ".mkv", ".mov", ".m4v", ".webm"],
+        "02_Videos_HD": [".avi", ".wmv", ".flv", ".mpg", ".mpeg"],
+        "03_Musica_FLAC": [".flac", ".wav", ".aiff", ".dsf"],
+        "04_Musica_MP3": [".mp3", ".m4a", ".ogg", ".wma"],
+        "05_Podcasts": [".mp3", ".m4a", ".opus"],
+        "06_Listas_Reproduccion": [".m3u", ".pls", ".xspf"],
+        "07_Subtitulos": [".srt", ".sub", ".ass", ".vtt"],
+        "08_Imagenes": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"],
+        "99_Otros_Multimedia": []
+    }
+}

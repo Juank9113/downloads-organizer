@@ -1,0 +1,9 @@
+{
+    "categories": {
+        " Apuntes_PDF": [".pdf"],
+        "📝 Documentos_Word": [".docx", ".doc"],
+        "📊 Presentaciones": [".pptx", ".ppt"],
+        "💻 Código": [".py", ".java", ".cpp", ".js"],
+        "🖼️ Imágenes_Clase": [".jpg", ".png", ".jpeg"]
+    }
+}
