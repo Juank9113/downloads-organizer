@@ -1,0 +1,183 @@
+
+Guía de Instalación en Windows - Downloads Organizer
+
+Esta guía te ayudará a instalar y ejecutar el proyecto Downloads Organizer en sistemas Windows, tanto si eres principiante como si tienes experiencia.
+
+Requisitos Previos
+
+Antes de empezar, asegúrate de tener instalado lo siguiente:
+
+- Python 3.7 o superior: Descargar desde python.org/downloads
+- Git: Descargar desde git-scm.com/download/win
+- PowerShell: Incluido por defecto en Windows 10 y 11
+
+Importante: Durante la instalación de Python, debes marcar la casilla "Add Python to PATH". Si ya lo tienes instalado sin esa opción, puedes reinstalar o añadir Python manualmente al PATH.
+
+Opción A: Instalación Automática (Recomendada)
+
+El proyecto incluye un script de PowerShell que configura todo automáticamente.
+
+Paso 1: Abrir PowerShell
+- Presiona Win + R, escribe powershell y pulsa Enter.
+- Recomendación: Haz clic derecho en el icono de PowerShell y selecciona "Ejecutar como administrador" para evitar problemas de permisos.
+
+Paso 2: Clonar el repositorio
+Ejecuta los siguientes comandos uno por uno:
+
+git clone https://github.com/Juank9113/downloads-organizer.git
+cd downloads-organizer
+
+Paso 3: Ejecutar el script de instalación automática
+Dentro de la carpeta del proyecto, ejecuta:
+
+.\scripts\install.ps1
+
+Si aparece un error de ejecución de scripts (política de ejecución restringida), ejecuta primero:
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+Y luego vuelve a ejecutar .\scripts\install.ps1.
+
+¿Qué hace el script automático?
+- Crea un entorno virtual (.venv) en la carpeta del proyecto.
+- Activa el entorno virtual.
+- Instala todas las dependencias desde requirements.txt.
+- Crea un acceso directo en el escritorio (opcional).
+- Te pregunta si quieres configurar una tarea programada para ejecutar el organizador cada hora.
+
+Al finalizar, el programa quedará listo para usar.
+
+Opción B: Instalación Manual (Paso a Paso)
+
+Si prefieres hacerlo tú mismo o el script automático falla, sigue estos pasos:
+
+1. Abrir PowerShell (como administrador recomendado)
+
+2. Clonar el repositorio
+
+git clone https://github.com/Juank9113/downloads-organizer.git
+cd downloads-organizer
+
+3. Crear un entorno virtual
+
+Un entorno virtual aísla las dependencias del proyecto y evita conflictos con otros programas.
+
+python -m venv venv
+
+¿Qué hace este comando? Crea una carpeta llamada venv dentro del proyecto con una copia de Python y sus herramientas.
+
+4. Activar el entorno virtual
+
+.\venv\Scripts\Activate.ps1
+
+Después de activarlo, verás (venv) al inicio de la línea de comandos, algo así:
+
+(venv) PS C:\ruta\downloads-organizer>
+
+Si recibes un error de permisos al activar: Ejecuta lo siguiente y luego vuelve a activar:
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+5. Instalar las dependencias
+
+Con el entorno virtual activado, ejecuta:
+
+pip install -r requirements.txt
+
+Posibles errores y soluciones:
+
+- 'pip' no se reconoce: Python no está en el PATH -> Reinstala Python marcando "Add to PATH" o añade manualmente la ruta C:\Python3x\Scripts.
+- ERROR: Could not find a version: Problemas de red o firewall -> Ejecuta: pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt.
+- Permiso denegado al instalar: No eres administrador -> Agrega --user al final: pip install --user -r requirements.txt.
+
+6. Verificar que la instalación funcionó
+
+python src/organizer.py --help
+
+Deberías ver la ayuda del programa con las opciones disponibles.
+
+7. Probar en modo simulación (sin mover archivos reales)
+
+python src/organizer.py --simulate
+
+Esto te mostrará qué archivos se moverían y a qué carpetas, sin hacer cambios aún.
+
+8. Ejecutar el organizador por primera vez
+
+python src/organizer.py
+
+Tus archivos de Descargas se moverán a Descargas_Organized según las categorías predefinidas.
+
+Verificación de la Instalación
+
+Para asegurarte de que todo está correcto, ejecuta estos comandos y comprueba las salidas:
+
+python --version
+# Debe mostrar: Python 3.7 o superior
+
+pip --version
+
+# Opcional: instalar pytest y ejecutar pruebas
+pip install pytest
+pytest tests/ -v
+# Deberían salir muchos "OK" o "PASSED"
+
+python src/organizer.py --stats
+
+Solución de Problemas Comunes (Troubleshooting)
+
+Problema 1: 'python' no se reconoce como comando interno o externo
+Solución: Añade Python al PATH manualmente:
+- Busca "Variables de entorno" en el menú de inicio.
+- Edita la variable Path.
+- Agrega las rutas: C:\Python3X y C:\Python3X\Scripts (reemplaza 3X con tu versión).
+- Reinicia PowerShell.
+
+Problema 2: cannot be loaded because running scripts is disabled on this system
+Solución: Ejecuta PowerShell como administrador y luego:
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+Presiona S (Sí) y reintenta el comando.
+
+Problema 3: El script install.ps1 no se encuentra
+Asegúrate de estar dentro de la carpeta downloads-organizer:
+cd ~\downloads-organizer
+dir scripts\*.ps1   # Debe mostrar install.ps1
+
+Problema 4: Error de permisos al mover archivos durante la ejecución
+- Verifica que las carpetas Downloads y Downloads_Organized tengan permisos de escritura.
+- Ejecuta PowerShell como administrador y vuelve a probar.
+
+Problema 5: El programa no mueve archivos (modo real)
+- Primero prueba con --simulate para ver qué debería pasar.
+- Si en simulación funciona pero en real no, ejecuta PowerShell como administrador.
+- Revisa que no haya antivirus bloqueando el movimiento de archivos.
+
+Problema 6: Dependencias no se instalan por problemas de red
+Usa un espejo alternativo:
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+Estructura Final Esperada después de la instalación
+
+C:\Users\TU_USUARIO\downloads-organizer\
+│   README.md
+│   requirements.txt
+│   ...
+├───src
+├───configs
+├───tests
+├───scripts
+│       install.ps1   ← script automático
+│       ...
+└───venv              ← entorno virtual (si usaste manual)
+
+Próximos Pasos
+
+- Automatizar la ejecución diaria: Ejecuta .\scripts\setup_cron.ps1 (si existe) o usa el Programador de Tareas de Windows.
+- Personalizar reglas: Edita los archivos JSON en la carpeta configs/.
+- Crear un acceso directo: Haz clic derecho en src/organizer.py → Enviar a → Escritorio (crear acceso directo).
+
+Soporte
+
+Si sigues teniendo problemas:
+- Abre un issue en GitHub: https://github.com/Juank9113/downloads-organizer/issues
+- Envía un correo a: juancarlosblancoruiz@gmail.com
