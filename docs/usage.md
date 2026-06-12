@@ -1,8 +1,8 @@
-# Guía de Uso - Downloads Organizer
+# 💡 Guía de uso
 
-## 🎯 Comandos Básicos
+## Comandos básicos
 
-### Uso más simple
+### Simular (recomendado la primera vez)
 
 ```bash
-python src/organizer.py
+python3 src/organizer.py --simulate

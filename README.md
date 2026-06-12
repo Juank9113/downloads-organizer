@@ -1,4 +1,5 @@
-#  Downloads Organizer
+#  Downloads Organizer 
+![Tests](https://github.com/Juank9113/downloads-organizer/actions/workflows/tests.yml/badge.svg)
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)

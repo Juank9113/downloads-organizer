@@ -1,0 +1,40 @@
+site_name: Downloads Organizer
+site_description: Organizador automático de archivos para la carpeta de Descargas
+site_author: Juan Carlos Blanco Ruiz
+site_url: https://juank9113.github.io/downloads-organizer/
+
+# 🌍 Configuración de idioma
+language: es
+
+repo_name: Juank9113/downloads-organizer
+repo_url: https://github.com/Juank9113/downloads-organizer
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Cambiar a modo claro
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Cambiar a modo oscuro
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+nav:
+  - 🏠 Inicio: index.md
+  - 🚀 Instalación: installation.md
+  - 💡 Uso: usage.md
+  - 🎨 Personalización: customization.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.tabbed
