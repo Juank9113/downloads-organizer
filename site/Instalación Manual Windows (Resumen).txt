@@ -1,0 +1,13 @@
+# 1. Clonar repositorio
+git clone https://github.com/Juank9113/downloads-organizer.git
+cd downloads-organizer
+
+# 2. Crear entorno virtual
+python -m venv venv
+.\venv\Scripts\activate
+
+# 3. Instalar dependencias
+pip install -r requirements.txt
+
+# 4. Ejecutar
+python src\organizer.py

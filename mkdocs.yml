@@ -3,14 +3,12 @@ site_description: Organizador automático de archivos para la carpeta de Descarg
 site_author: Juan Carlos Blanco Ruiz
 site_url: https://juank9113.github.io/downloads-organizer/
 
-# 🌍 Configuración de idioma
-language: es
-
 repo_name: Juank9113/downloads-organizer
 repo_url: https://github.com/Juank9113/downloads-organizer
 
 theme:
   name: material
+  language: es
   palette:
     - scheme: default
       primary: blue
@@ -26,15 +24,19 @@ theme:
         name: Cambiar a modo oscuro
   features:
     - navigation.tabs
+    - navigation.sections
     - content.code.copy
+    - search.suggest
 
 nav:
-  - 🏠 Inicio: index.md
-  - 🚀 Instalación: installation.md
-  - 💡 Uso: usage.md
-  - 🎨 Personalización: customization.md
+  - Inicio: index.md
+  - Instalacion: installation.md
+  - Uso: usage.md
+  - Personalizacion: customization.md
 
 markdown_extensions:
   - admonition
   - pymdownx.superfences
   - pymdownx.tabbed
+  - toc:
+      permalink: true
