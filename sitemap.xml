@@ -2,18 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://juank9113.github.io/downloads-organizer/</loc>
-         <lastmod>2026-06-12</lastmod>
+         <lastmod>2026-06-14</lastmod>
     </url>
     <url>
          <loc>https://juank9113.github.io/downloads-organizer/customization/</loc>
-         <lastmod>2026-06-12</lastmod>
+         <lastmod>2026-06-14</lastmod>
+    </url>
+    <url>
+         <loc>https://juank9113.github.io/downloads-organizer/gui/</loc>
+         <lastmod>2026-06-14</lastmod>
     </url>
     <url>
          <loc>https://juank9113.github.io/downloads-organizer/installation/</loc>
-         <lastmod>2026-06-12</lastmod>
+         <lastmod>2026-06-14</lastmod>
+    </url>
+    <url>
+         <loc>https://juank9113.github.io/downloads-organizer/simulation/</loc>
+         <lastmod>2026-06-14</lastmod>
+    </url>
+    <url>
+         <loc>https://juank9113.github.io/downloads-organizer/stats/</loc>
+         <lastmod>2026-06-14</lastmod>
     </url>
     <url>
          <loc>https://juank9113.github.io/downloads-organizer/usage/</loc>
-         <lastmod>2026-06-12</lastmod>
+         <lastmod>2026-06-14</lastmod>
     </url>
 </urlset>
