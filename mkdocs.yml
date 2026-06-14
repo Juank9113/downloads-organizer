@@ -1,5 +1,5 @@
 site_name: Downloads Organizer
-site_description: Organizador automático de archivos para la carpeta de Descargas
+site_description: Organizador automatico de archivos para la carpeta de Descargas con GUI profesional
 site_author: Juan Carlos Blanco Ruiz
 site_url: https://juank9113.github.io/downloads-organizer/
 
@@ -25,18 +25,47 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+    - navigation.top
     - content.code.copy
+    - content.code.select
+    - content.code.annotate
     - search.suggest
+    - search.highlight
 
 nav:
   - Inicio: index.md
   - Instalacion: installation.md
-  - Uso: usage.md
+  - Guia de uso: usage.md
+  - Interfaz Grafica: gui.md
+  - Modo Simulacion: simulation.md
+  - Estadisticas: stats.md
   - Personalizacion: customization.md
 
 markdown_extensions:
   - admonition
+  - pymdownx.details
   - pymdownx.superfences
-  - pymdownx.tabbed
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
   - toc:
       permalink: true
+      toc_depth: 3
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Juank9113/downloads-organizer
+    - icon: fontawesome/brands/python
+      link: https://www.python.org/
+  generator: false
+
+copyright: Copyright &copy; 2024 Juan Carlos Blanco Ruiz

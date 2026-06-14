@@ -25,3 +25,4 @@ Crea un archivo `config_personal.json` con la siguiente estructura:
     "auto_clean": false,
     "clean_days": 30
 }
+```

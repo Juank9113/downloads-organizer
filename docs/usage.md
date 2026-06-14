@@ -6,3 +6,4 @@
 
 ```bash
 python3 src/organizer.py --simulate
+```

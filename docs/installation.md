@@ -23,3 +23,4 @@ chmod +x scripts/install.sh
 
 # 3. Reiniciar terminal o ejecutar
 source ~/.bashrc  # o ~/.zshrc en macOS
+```
