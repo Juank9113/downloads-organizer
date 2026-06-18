@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Downloads Organizer Pro - GUI con estilo iOS
-Corrección: Deshacer se activa inmediatamente después de eliminar
-Toggle switches con estilo iOS (gris/azul)
+Integración completa: Undo/Redo + Duplicados + Modo Interactivo con ventanas visuales
 """
 
 import tkinter as tk
@@ -13,11 +12,12 @@ import os
 import threading
 import json
 import traceback
+import re
+import signal
 from pathlib import Path
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-# Importación segura de módulos
 current_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(current_dir))
 
@@ -38,9 +38,7 @@ except Exception as e:
     print(f"⚠️ No se pudo importar undo_manager: {e}")
 
 
-# ----------------------------------------------------------------------
 # Tooltip flotante
-# ----------------------------------------------------------------------
 class Tooltip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -68,9 +66,182 @@ class Tooltip:
             self.tip_window = None
 
 
-# ----------------------------------------------------------------------
-# Toggle Switch para MODO SIMULACIÓN (40x22) - Estilo iOS
-# ----------------------------------------------------------------------
+# Diálogo interactivo visual con radio buttons
+class InteractiveDialog(tk.Toplevel):
+    def __init__(self, parent, prompt_text, options, process_stdin, title="Selecciona una opción"):
+        super().__init__(parent)
+        self.process_stdin = process_stdin
+        self.options = options
+        self.title(title)
+        self.geometry("500x500")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        # Variable para la opción seleccionada
+        self.selected_var = tk.IntVar(value=0)
+        self.new_category_var = tk.StringVar(value="")
+        self.new_category_entry = None
+
+        # Mensaje del prompt
+        msg_label = ttk.Label(self, text="¿Qué deseas hacer con este archivo?", 
+                              wraplength=450, font=("Segoe UI", 11, "bold"))
+        msg_label.pack(pady=10, padx=20)
+
+        # Frame para las opciones
+        options_frame = ttk.Frame(self)
+        options_frame.pack(pady=5, padx=20, fill=tk.X)
+
+        # Crear radio buttons para cada opción
+        for opt_num, opt_text in options:
+            rb = ttk.Radiobutton(options_frame, text=opt_text, 
+                                  variable=self.selected_var, value=opt_num,
+                                  command=lambda n=opt_num: self._on_option_select(n))
+            rb.pack(anchor=tk.W, pady=2, padx=10)
+
+        # Entry para nueva categoría (oculto por defecto)
+        self.new_cat_frame = ttk.Frame(self)
+        ttk.Label(self.new_cat_frame, text="Nombre de la nueva categoría:", 
+                  font=("Segoe UI", 10)).pack(side=tk.LEFT, padx=10)
+        self.new_category_entry = ttk.Entry(self.new_cat_frame, textvariable=self.new_category_var, width=25)
+        self.new_category_entry.pack(side=tk.LEFT, padx=5)
+        self.new_cat_frame.pack_forget()  # Oculto inicialmente
+
+        # Botones de acción
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=15)
+
+        ttk.Button(btn_frame, text="Enviar", command=self.send_response,
+                   style="iosAccent.TButton", width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancelar", command=self.cancel,
+                   style="ios.TButton", width=12).pack(side=tk.LEFT, padx=5)
+
+        # Centrar ventana
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'+{x}+{y}')
+
+    def _on_option_select(self, option_num):
+        """Maneja la selección de una opción."""
+        # Encontrar el número de "Crear nueva categoría"
+        create_new_num = None
+        for num, text in self.options:
+            if "Crear nueva categoría" in text or "nueva categoría" in text.lower():
+                create_new_num = num
+                break
+        
+        # Mostrar/ocultar el campo de nueva categoría
+        if option_num == create_new_num:
+            self.new_cat_frame.pack(pady=5)
+            self.new_category_entry.focus_set()
+        else:
+            self.new_cat_frame.pack_forget()
+
+    def send_response(self):
+        """Envía la respuesta al proceso."""
+        selected = self.selected_var.get()
+        if selected == 0:
+            messagebox.showwarning("Sin selección", "Por favor, selecciona una opción.")
+            return
+        
+        # Verificar si es "Crear nueva categoría"
+        create_new_num = None
+        for num, text in self.options:
+            if "Crear nueva categoría" in text or "nueva categoría" in text.lower():
+                create_new_num = num
+                break
+        
+        if selected == create_new_num:
+            new_cat = self.new_category_var.get().strip()
+            if not new_cat:
+                messagebox.showwarning("Campo vacío", "Por favor, escribe el nombre de la nueva categoría.")
+                return
+            # CORRECCIÓN: Enviar PRIMERO el número de la opción, LUEGO el nombre
+            if self.process_stdin:
+                try:
+                    # Paso 1: Enviar el número de la opción
+                    self.process_stdin.write(str(selected) + "\n")
+                    self.process_stdin.flush()
+                    
+                    # Paso 2: Enviar el nombre de la nueva categoría
+                    self.process_stdin.write(new_cat + "\n")
+                    self.process_stdin.flush()
+                except Exception as e:
+                    print(f"Error al enviar respuesta: {e}")
+            self.destroy()
+            return
+        
+        # Enviar el número de la opción
+        if self.process_stdin:
+            try:
+                self.process_stdin.write(str(selected) + "\n")
+                self.process_stdin.flush()
+            except Exception as e:
+                print(f"Error al enviar respuesta: {e}")
+        self.destroy()
+
+    def cancel(self):
+        """Cancela y cierra el diálogo."""
+        if self.process_stdin:
+            try:
+                self.process_stdin.write("\n")
+                self.process_stdin.flush()
+            except Exception:
+                pass
+        self.destroy()
+
+
+class RememberDialog(tk.Toplevel):
+    def __init__(self, parent, prompt_text, process_stdin):
+        super().__init__(parent)
+        self.process_stdin = process_stdin
+        self.title("Recordar decisión")
+        self.geometry("400x180")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self, text=prompt_text, wraplength=350, font=("Segoe UI", 11)).pack(pady=20, padx=20)
+
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=10)
+
+        def send_resp(resp):
+            if self.process_stdin:
+                try:
+                    self.process_stdin.write(resp + "\n")
+                    self.process_stdin.flush()
+                except Exception:
+                    pass
+            self.destroy()
+
+        ttk.Button(btn_frame, text="Sí, recordar", command=lambda: send_resp("s"),
+                   style="iosAccent.TButton", width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="No recordar", command=lambda: send_resp("n"),
+                   style="ios.TButton", width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self, text="Cancelar", command=self.cancel, style="ios.TButton", width=12).pack(pady=10)
+
+        self.update_idletasks()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (w // 2)
+        y = (self.winfo_screenheight() // 2) - (h // 2)
+        self.geometry(f'+{x}+{y}')
+
+    def cancel(self):
+        if self.process_stdin:
+            try:
+                self.process_stdin.write("\n")
+                self.process_stdin.flush()
+            except Exception:
+                pass
+        self.destroy()
+
+
+# Toggle Switch (simplificado)
 class ToggleSwitch(ttk.Frame):
     def __init__(self, master, variable, command=None, tooltip_text=None, **kwargs):
         super().__init__(master, **kwargs)
@@ -128,10 +299,9 @@ class ToggleSwitch(ttk.Frame):
 
     def _update(self):
         self.canvas.delete("all")
-        # Colores: apagado = gris, encendido = azul
         color_off = "#e5e5ea"
         color_on = "#0d6efd"
-        progress = self.anim_pos / 18  # 0 = apagado, 1 = encendido
+        progress = self.anim_pos / 18
         current_color = self._interpolate_color(color_off, color_on, progress)
 
         r = self.height / 2
@@ -148,7 +318,6 @@ class ToggleSwitch(ttk.Frame):
         circle_size = self.height - 2 * margin
         circle_x = margin + self.anim_pos
         circle_y = margin
-        
         self.canvas.create_oval(circle_x + 1, circle_y + 1,
                                 circle_x + circle_size + 1, circle_y + circle_size + 1,
                                 fill="#c0c0c0", outline="")
@@ -156,11 +325,10 @@ class ToggleSwitch(ttk.Frame):
                                 circle_x + circle_size, circle_y + circle_size,
                                 fill="white", outline="#d1d1d6", width=1)
 
-        # Actualizar negrita de etiquetas
-        if self.variable.get():  # encendido (Real)
+        if self.variable.get():
             self.label_left.config(font=("Segoe UI", 9))
             self.label_right.config(font=("Segoe UI", 9, "bold"))
-        else:  # apagado (Simulado)
+        else:
             self.label_left.config(font=("Segoe UI", 9, "bold"))
             self.label_right.config(font=("Segoe UI", 9))
 
@@ -174,9 +342,6 @@ class ToggleSwitch(ttk.Frame):
         return f"#{r:02x}{g:02x}{b:02x}"
 
 
-# ----------------------------------------------------------------------
-# Toggle Switch para TEMA CLARO/OSCURO - Estilo iOS
-# ----------------------------------------------------------------------
 class ThemeToggleSwitch(ttk.Frame):
     def __init__(self, master, variable, command=None, tooltip_text=None, is_dark_mode=False, **kwargs):
         super().__init__(master, **kwargs)
@@ -236,14 +401,11 @@ class ThemeToggleSwitch(ttk.Frame):
 
     def _update(self):
         self.canvas.delete("all")
-        
         canvas_bg = "#2d2d2d" if self.is_dark_mode else "white"
         self.canvas.configure(bg=canvas_bg)
-        
-        # Colores: apagado = gris, encendido = azul
         color_off = "#e5e5ea"
         color_on = "#0d6efd"
-        progress = self.anim_pos / 18  # 0 = apagado, 1 = encendido
+        progress = self.anim_pos / 18
         current_color = self._interpolate_color(color_off, color_on, progress)
 
         r = self.height / 2
@@ -260,7 +422,6 @@ class ThemeToggleSwitch(ttk.Frame):
         circle_size = self.height - 2 * margin
         circle_x = margin + self.anim_pos
         circle_y = margin
-        
         self.canvas.create_oval(circle_x + 1, circle_y + 1,
                                 circle_x + circle_size + 1, circle_y + circle_size + 1,
                                 fill="#c0c0c0", outline="")
@@ -268,11 +429,10 @@ class ThemeToggleSwitch(ttk.Frame):
                                 circle_x + circle_size, circle_y + circle_size,
                                 fill="white", outline="#d1d1d6", width=1)
 
-        # Actualizar negrita de etiquetas
-        if self.variable.get():  # encendido (Oscuro)
+        if self.variable.get():
             self.label_left.config(font=("Segoe UI", 9))
             self.label_right.config(font=("Segoe UI", 9, "bold"))
-        else:  # apagado (Claro)
+        else:
             self.label_left.config(font=("Segoe UI", 9, "bold"))
             self.label_right.config(font=("Segoe UI", 9))
 
@@ -286,16 +446,13 @@ class ThemeToggleSwitch(ttk.Frame):
         return f"#{r:02x}{g:02x}{b:02x}"
 
 
-# ----------------------------------------------------------------------
-# Perfiles y preferencias
-# ----------------------------------------------------------------------
 PERFILES = {
-    "General": {"archivo": "config_default.json", "descripcion": "Organización estándar", "icono": "📁"},
+    "General": {"archivo": "config_default.json", "descripcion": "Organización estándar", "icono": ""},
     "Desarrollador": {"archivo": "config_dev.json", "descripcion": "Código y proyectos", "icono": "💻"},
     "Estudiante": {"archivo": "estudiante.json", "descripcion": "Apuntes y tareas", "icono": "📚"},
     "Diseñador": {"archivo": "disenador.json", "descripcion": "Fuentes e imágenes", "icono": "🎨"},
     "Profesional": {"archivo": "profesional.json", "descripcion": "Documentos laborales", "icono": "💼"},
-    "Limpieza": {"archivo": "config_limpieza.json", "descripcion": "Limpieza profunda", "icono": "🧹"},
+    "Limpieza": {"archivo": "config_limpieza.json", "descripcion": "Limpieza profunda", "icono": ""},
     "Backup": {"archivo": "config_backup.json", "descripcion": "Respaldos", "icono": "💾"},
     "Multimedia": {"archivo": "config_multimedia.json", "descripcion": "Vídeos y música", "icono": "🎬"},
     "Personalizado": {"archivo": "", "descripcion": "Configuración propia", "icono": "⚙️"}
@@ -304,9 +461,6 @@ PERFILES = {
 PREFS_FILE = Path.home() / ".downloads_organizer_prefs.json"
 
 
-# ----------------------------------------------------------------------
-# Aplicación principal
-# ----------------------------------------------------------------------
 class DownloadsOrganizerGUI:
     def __init__(self, root):
         self.root = root
@@ -317,31 +471,27 @@ class DownloadsOrganizerGUI:
         self.style = ttk.Style()
         self.preferences = self._load_preferences()
 
-        # Variables
         self.downloads_dir = tk.StringVar(value=self.preferences.get("downloads_dir", str(Path.home() / "Downloads")))
         self.organized_dir = tk.StringVar(value=self.preferences.get("organized_dir", str(Path.home() / "Downloads_Organized")))
         self.simulate_mode = tk.BooleanVar(value=self.preferences.get("simulate_mode", True))
+        self.interactive_mode = tk.BooleanVar(value=self.preferences.get("interactive_mode", False))
         self.config_file = tk.StringVar(value="")
         self.selected_profile = tk.StringVar(value=self.preferences.get("selected_profile", "General"))
         self.dark_mode = tk.BooleanVar(value=self.preferences.get("dark_mode", False))
         self.progress_var = tk.DoubleVar(value=0)
         self.status_text = tk.StringVar(value="Listo para organizar")
 
-        # Variables para detector de duplicados
         self.dup_folder = tk.StringVar(value=str(Path.home() / "Downloads"))
         self.dup_min_size = tk.StringVar(value="1024")
         self.dup_recursive = tk.BooleanVar(value=True)
         self.dup_simulate = tk.BooleanVar(value=True)
-        
-        # Estado del detector
+
         self.current_detector = None
         self.current_reporte = None
         self.dup_selected_files = set()
-        
-        # Flag para saber si la última eliminación fue simulada
+
         self.last_delete_was_simulation = False
-        
-        # Instancia del UndoManager
+
         self.undo_manager = None
         if UndoManager:
             try:
@@ -350,18 +500,19 @@ class DownloadsOrganizerGUI:
             except Exception as e:
                 print(f"⚠️ Error al inicializar UndoManager: {e}")
                 self.undo_manager = None
-        
+
+        self.current_process = None
+        self.process_alive = False
+
+        # Configurar cierre seguro
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
         try:
             self._setup_ios_styles()
-            print("✅ Estilos configurados")
             self._create_header()
-            print("✅ Header creado")
             self._create_segmented_control()
-            print("✅ Segmented control creado")
             self._create_pages()
-            print("✅ Páginas creadas")
             self._create_progress_and_status()
-            print("✅ Progress y status creados")
         except Exception as e:
             print(f"❌ Error fatal durante la creación de la GUI: {e}")
             traceback.print_exc()
@@ -370,9 +521,24 @@ class DownloadsOrganizerGUI:
         self._on_profile_change()
         self._on_simulate_change()
         self._apply_theme()
-        
+
         if self.undo_manager:
             self.root.after(100, self._update_undo_redo_panel)
+
+    def on_closing(self):
+        """Terminar proceso hijo y cerrar GUI correctamente."""
+        if self.current_process and self.process_alive:
+            try:
+                print("🛑 Terminando proceso hijo...")
+                self.current_process.terminate()
+                self.current_process.wait(timeout=2)
+            except Exception as e:
+                print(f"Error al terminar proceso: {e}")
+                try:
+                    self.current_process.kill()
+                except:
+                    pass
+        self.root.destroy()
 
     def _load_preferences(self):
         try:
@@ -390,6 +556,7 @@ class DownloadsOrganizerGUI:
                 "downloads_dir": self.downloads_dir.get(),
                 "organized_dir": self.organized_dir.get(),
                 "simulate_mode": self.simulate_mode.get(),
+                "interactive_mode": self.interactive_mode.get(),
                 "selected_profile": self.selected_profile.get()
             }
             with open(PREFS_FILE, 'w', encoding='utf-8') as f:
@@ -399,7 +566,6 @@ class DownloadsOrganizerGUI:
 
     def _setup_ios_styles(self):
         font_family = "TkDefaultFont"
-        
         self.style.configure(".", font=(font_family, 10))
         self.style.configure("TLabel", font=(font_family, 10))
         self.style.configure("TLabelframe.Label", font=(font_family, 10, "bold"))
@@ -464,7 +630,6 @@ class DownloadsOrganizerGUI:
         self.pages_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15, side=tk.TOP)
 
         self.pages = [ttk.Frame(self.pages_container) for _ in range(4)]
-        
         self.pages[0].pack(fill=tk.BOTH, expand=True)
         for page in self.pages[1:]:
             page.pack_forget()
@@ -472,9 +637,7 @@ class DownloadsOrganizerGUI:
     def _show_page(self, index):
         for page in self.pages:
             page.pack_forget()
-
         self.pages[index].pack(fill=tk.BOTH, expand=True)
-
         buttons = [self.btn_config, self.btn_run, self.btn_stats, self.btn_duplicates]
         for i, btn in enumerate(buttons):
             if i == index:
@@ -551,6 +714,16 @@ class DownloadsOrganizerGUI:
         )
         self.simulate_toggle.pack(side=tk.LEFT, padx=10)
 
+        inter_container = ttk.Frame(sim_frame)
+        inter_container.pack(fill=tk.X, pady=5)
+        ttk.Label(inter_container, text="Modo interactivo:", font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=(0, 20))
+        self.interactive_check = ttk.Checkbutton(inter_container, variable=self.interactive_mode,
+                                                  command=self._on_interactive_change)
+        self.interactive_check.pack(side=tk.LEFT, padx=10)
+        Tooltip(self.interactive_check, "Pregunta qué hacer con archivos de extensiones desconocidas.\nSe mostrarán ventanas con botones.")
+        ttk.Label(inter_container, text="Ventanas con botones para elegir opciones",
+                  font=("Segoe UI", 9), bootstyle="info").pack(side=tk.LEFT, padx=10)
+
         ttk.Label(sim_frame,
                   text="Simulado: previsualiza sin mover archivos.\nReal: ejecuta la organización real.",
                   wraplength=700, bootstyle="info", font=("Segoe UI", 9), justify=tk.LEFT).pack(anchor=tk.W, pady=(5, 0))
@@ -589,6 +762,9 @@ class DownloadsOrganizerGUI:
         self.output_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
+        self.interactive_info_label = ttk.Label(parent, text="", font=("Segoe UI", 10))
+        self.interactive_info_label.pack_forget()
+
     def _create_stats_page(self, parent):
         ttk.Button(parent, text="Cargar Estadísticas", command=self._load_stats,
                    style="iosAccent.TButton", width=20).pack(pady=(0, 15))
@@ -605,118 +781,94 @@ class DownloadsOrganizerGUI:
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
     def _create_duplicates_page(self, parent):
-        print("   Creando página de duplicados...")
-        
-        history_frame = ttk.Labelframe(parent, text="  Historial de Operaciones  ", padding=10)
+        print("   Iniciando creación de página de duplicados...")
+        history_frame = ttk.Frame(parent, padding=10)
         history_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.undo_redo_label = ttk.Label(history_frame, 
+        ttk.Label(history_frame, text="Historial de Operaciones", font=("TkDefaultFont", 10, "bold")).pack(anchor=tk.W)
+        self.undo_redo_label = ttk.Label(history_frame,
                                          text="↩️ Deshacer: 0 disponibles  |  ↪️ Rehacer: 0 disponibles",
-                                         font=("Segoe UI", 10, "bold"))
+                                         font=("TkDefaultFont", 10))
         self.undo_redo_label.pack(pady=5)
-        
-        config_frame = ttk.Labelframe(parent, text="  Configuración del Detector  ", padding=10)
-        config_frame.pack(fill=tk.X, pady=(0, 10))
+        print("   Historial creado.")
 
-        ttk.Label(config_frame, text="Carpeta a analizar:", font=("Segoe UI", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        config_frame = ttk.Frame(parent, padding=10)
+        config_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(config_frame, text="Carpeta a analizar:", font=("TkDefaultFont", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
         folder_frame = ttk.Frame(config_frame)
         folder_frame.pack(fill=tk.X, pady=(0, 10))
-        ttk.Entry(folder_frame, textvariable=self.dup_folder, style="ios.TEntry").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
-        ttk.Button(folder_frame, text="Examinar...", command=self._browse_dup_folder, style="ios.TButton", width=12).pack(side=tk.RIGHT)
+        ttk.Entry(folder_frame, textvariable=self.dup_folder).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        ttk.Button(folder_frame, text="Examinar...", command=self._browse_dup_folder).pack(side=tk.RIGHT)
 
         options_frame = ttk.Frame(config_frame)
         options_frame.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(options_frame, text="Tamaño mínimo (bytes):", font=("Segoe UI", 9)).pack(side=tk.LEFT, pady=5, padx=(0, 10))
-        size_entry = tk.Entry(options_frame, textvariable=self.dup_min_size, width=15, font=("Segoe UI", 9))
+        ttk.Label(options_frame, text="Tamaño mínimo (bytes):").pack(side=tk.LEFT, pady=5, padx=(0, 10))
+        size_entry = tk.Entry(options_frame, textvariable=self.dup_min_size, width=15)
         size_entry.pack(side=tk.LEFT, padx=(0, 20))
-
-        ttk.Label(options_frame, text="Búsqueda recursiva:", font=("Segoe UI", 9)).pack(side=tk.LEFT, pady=5, padx=(0, 5))
-        tk.Checkbutton(options_frame, variable=self.dup_recursive, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 20))
-
-        ttk.Label(options_frame, text="Modo simulación:", font=("Segoe UI", 9)).pack(side=tk.LEFT, pady=5, padx=(0, 5))
-        tk.Checkbutton(options_frame, variable=self.dup_simulate, font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        ttk.Label(options_frame, text="Búsqueda recursiva:").pack(side=tk.LEFT, pady=5, padx=(0, 5))
+        tk.Checkbutton(options_frame, variable=self.dup_recursive).pack(side=tk.LEFT, padx=(0, 20))
+        ttk.Label(options_frame, text="Modo simulación:").pack(side=tk.LEFT, pady=5, padx=(0, 5))
+        tk.Checkbutton(options_frame, variable=self.dup_simulate).pack(side=tk.LEFT)
+        print("   Configuración creada.")
 
         button_frame = ttk.Frame(parent)
         button_frame.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Button(button_frame, text=" Analizar Duplicados", command=self._analyze_duplicates,
+        ttk.Button(button_frame, text="🔍 Analizar Duplicados", command=self._analyze_duplicates,
                    style="iosAccent.TButton", width=18).pack(side=tk.LEFT, padx=5)
-        
         ttk.Button(button_frame, text="Eliminar", command=self._delete_selected_duplicates,
                    style="iosAccent.TButton", width=12).pack(side=tk.LEFT, padx=5)
-
-        # Botón Deshacer con Tooltip
         self.undo_button = ttk.Button(button_frame, text="↩️ Deshacer", command=self._do_undo,
                                       style="ios.TButton", width=12, state=tk.DISABLED)
         self.undo_button.pack(side=tk.LEFT, padx=5)
-        Tooltip(self.undo_button, "Deshace la última eliminación, recuperando los archivos.")
-        
-        # Botón Rehacer con Tooltip
         self.redo_button = ttk.Button(button_frame, text="↪️ Rehacer", command=self._do_redo,
                                       style="ios.TButton", width=12, state=tk.DISABLED)
         self.redo_button.pack(side=tk.LEFT, padx=5)
-        Tooltip(self.redo_button, "Rehacer la eliminación (permanente solo en modo Real).")
-
-        ttk.Button(button_frame, text=" Limpiar", command=self._clear_dup_results,
+        ttk.Button(button_frame, text="🧹 Limpiar", command=self._clear_dup_results,
                    style="ios.TButton", width=12).pack(side=tk.RIGHT, padx=5)
+        print("   Botones creados.")
 
         self.dup_summary_frame = ttk.Frame(parent)
         self.dup_summary_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.dup_summary_label = ttk.Label(self.dup_summary_frame, text="", font=("Segoe UI", 10, "bold"))
+        self.dup_summary_label = ttk.Label(self.dup_summary_frame, text="", font=("TkDefaultFont", 10, "bold"))
         self.dup_summary_label.pack()
 
-        results_frame = ttk.Labelframe(parent, text="  Duplicados encontrados (doble clic para marcar/desmarcar CUALQUIER archivo)  ",
-                                       padding=10)
+        results_frame = ttk.Frame(parent)
         results_frame.pack(fill=tk.BOTH, expand=True)
-
-        self.dup_text = tk.Text(results_frame, wrap=tk.NONE, font=("Consolas", 9),
-                                bg="#1e1e1e", fg="#d4d4d4", insertbackground="#ffffff",
+        self.dup_text = tk.Text(results_frame, wrap=tk.WORD, font=("TkFixedFont", 9),
                                 relief=tk.FLAT, bd=0, state=tk.DISABLED)
-        
         scroll_y = ttk.Scrollbar(results_frame, orient=tk.VERTICAL, command=self.dup_text.yview)
         scroll_x = ttk.Scrollbar(results_frame, orient=tk.HORIZONTAL, command=self.dup_text.xview)
         self.dup_text.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
-        
         self.dup_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
         scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
-        
         self.dup_text.bind("<Double-1>", self._on_dup_text_double_click)
-        
-        self.dup_placeholder = ttk.Label(results_frame, 
+
+        self.dup_placeholder = ttk.Label(results_frame,
                                          text="Haz clic en 'Analizar Duplicados' para comenzar",
-                                         font=("Segoe UI", 11), bootstyle="secondary")
+                                         font=("TkDefaultFont", 11))
         self.dup_placeholder.pack(pady=50)
-        
-        self.dup_text.tag_configure('header', foreground='#007aff', font=('Segoe UI', 10, 'bold'))
-        self.dup_text.tag_configure('original', foreground='#34c759')
-        self.dup_text.tag_configure('duplicate', foreground='#ff9500')
-        self.dup_text.tag_configure('selected', foreground='#ff3b30', font=('Consolas', 9, 'bold'))
-        self.dup_text.tag_configure('restored', foreground='#00ff00', font=('Consolas', 9, 'bold'))
-        
+
+        self.dup_text.tag_configure('header', foreground='blue', font=('TkDefaultFont', 10, 'bold'))
+        self.dup_text.tag_configure('original', foreground='green')
+        self.dup_text.tag_configure('duplicate', foreground='orange')
+        self.dup_text.tag_configure('selected', foreground='red', font=('TkFixedFont', 9, 'bold'))
+        self.dup_text.tag_configure('restored', foreground='green', font=('TkFixedFont', 9, 'bold'))
         print("  ✅ Página de duplicados creada correctamente")
 
     def _on_dup_text_double_click(self, event):
         try:
             index = self.dup_text.index(f"@{event.x},{event.y}")
             line_num = int(index.split('.')[0])
-            
             line_content = self.dup_text.get(f"{line_num}.0", f"{line_num}.end").strip()
-            
             clean_line = line_content
             if clean_line.startswith('⭐ '):
                 clean_line = clean_line[2:]
-            
             if clean_line.startswith('[ ]') or clean_line.startswith('[✓]'):
                 file_path = clean_line[4:].strip()
-                
                 if line_content.startswith('⭐ ['):
                     checkbox_start = 2
                 else:
                     checkbox_start = 0
-                
                 if file_path in self.dup_selected_files:
                     self.dup_selected_files.remove(file_path)
                     self.dup_text.config(state=tk.NORMAL)
@@ -739,7 +891,6 @@ class DownloadsOrganizerGUI:
                         self.dup_text.insert(f"{line_num}.0", '[✓]')
                     self.dup_text.tag_add('selected', f"{line_num}.0", f"{line_num}.end")
                     self.dup_text.config(state=tk.DISABLED)
-                
                 self.status_text.set(f"Seleccionados: {len(self.dup_selected_files)} archivos")
         except Exception as e:
             print(f"Error en doble clic: {e}")
@@ -753,27 +904,22 @@ class DownloadsOrganizerGUI:
         if not DetectorDuplicados:
             messagebox.showerror("Error", "El módulo detector_duplicados no está disponible.")
             return
-            
         folder = Path(self.dup_folder.get())
-        
         if not folder.exists():
             messagebox.showerror("Error", f"La carpeta '{folder}' no existe")
             return
-        
         self.status_text.set("Analizando duplicados...")
         self.dup_selected_files.clear()
         self.current_detector = None
         self.current_reporte = None
-        
         if hasattr(self, 'dup_placeholder'):
             self.dup_placeholder.pack_forget()
-        
         self.dup_text.config(state=tk.NORMAL)
         self.dup_text.delete(1.0, tk.END)
         self.dup_text.insert(tk.END, "🔍 Analizando... por favor espere\n")
         self.dup_text.config(state=tk.DISABLED)
-        
         thread = threading.Thread(target=self._run_duplicate_analysis, args=(folder,))
+        thread.daemon = True
         thread.start()
 
     def _run_duplicate_analysis(self, folder):
@@ -782,18 +928,14 @@ class DownloadsOrganizerGUI:
                 min_size = int(self.dup_min_size.get())
             except ValueError:
                 min_size = 1024
-            
             detector = DetectorDuplicados(
                 carpeta=folder,
                 tamano_minimo=min_size,
                 recursivo=self.dup_recursive.get(),
                 modo_simulacion=self.dup_simulate.get()
             )
-            
             reporte = detector.analizar()
-            
             self.root.after(0, self._display_dup_results_text, reporte, detector)
-            
         except Exception as e:
             self.root.after(0, lambda: self._show_analysis_error(str(e)))
 
@@ -804,11 +946,9 @@ class DownloadsOrganizerGUI:
     def _display_dup_results_text(self, reporte, detector):
         self.current_detector = detector
         self.current_reporte = reporte
-        
         total_duplicados = reporte['duplicados_por_contenido']['archivos_duplicados']
         espacio_recuperable = reporte['duplicados_por_contenido']['espacio_recuperable_human']
         grupos = len(detector.grupos_contenido)
-        
         if total_duplicados > 0:
             self.dup_summary_label.config(
                 text=f"📊 Se encontraron {grupos} grupos con {total_duplicados} archivos duplicados | Espacio recuperable: {espacio_recuperable}",
@@ -819,39 +959,29 @@ class DownloadsOrganizerGUI:
                 text="✅ No se encontraron archivos duplicados",
                 bootstyle="success"
             )
-        
         self.dup_text.config(state=tk.NORMAL)
         self.dup_text.delete(1.0, tk.END)
-        
         if detector.grupos_contenido:
             self.dup_text.insert(tk.END, "🔐 DUPLICADOS POR CONTENIDO\n\n", 'header')
             self.dup_text.insert(tk.END, "💡 Doble clic en CUALQUIER archivo para marcarlo para eliminación\n\n", 'header')
-            
             for i, grupo in enumerate(detector.grupos_contenido, 1):
                 original = grupo.archivo_original
-                
                 self.dup_text.insert(tk.END, f"\nGrupo {i} - Tamaño: {grupo.archivos[0]._tamano_human()}\n", 'header')
                 self.dup_text.insert(tk.END, f"{'='*60}\n")
-                
                 for archivo in grupo.archivos:
                     es_original = (archivo == original)
                     file_path = str(archivo.ruta)
                     file_size = archivo._tamano_human()
                     file_date = archivo.fecha_modificacion.strftime('%Y-%m-%d %H:%M')
-                    
                     if es_original:
                         self.dup_text.insert(tk.END, f"⭐ [ ] {file_path} ({file_size}) - {file_date}\n", 'original')
                     else:
                         self.dup_text.insert(tk.END, f"   [ ] {file_path} ({file_size}) - {file_date}\n", 'duplicate')
-                
                 self.dup_text.insert(tk.END, "\n")
-        
         self.dup_text.config(state=tk.DISABLED)
-        
         self.status_text.set(f"Análisis completado: {total_duplicados} duplicados encontrados")
-        
         if total_duplicados > 0:
-            messagebox.showinfo("Análisis completado", 
+            messagebox.showinfo("Análisis completado",
                               f"Se encontraron {total_duplicados} archivos duplicados.\n"
                               f"Espacio recuperable: {espacio_recuperable}\n\n"
                               f"Los archivos marcados con ⭐ son los más recientes.\n"
@@ -865,42 +995,28 @@ class DownloadsOrganizerGUI:
         if not GrupoDuplicados:
             messagebox.showerror("Error", "El módulo detector_duplicados no está disponible.")
             return
-            
         selected_files = self._get_selected_files()
-        
         if not selected_files:
-            messagebox.showwarning("Sin selección", 
+            messagebox.showwarning("Sin selección",
                                    "No has seleccionado ningún archivo para eliminar.\n\n"
                                    "Haz doble clic en las líneas que deseas eliminar para marcarlas con [✓].")
             return
-        
         modo = "SIMULACIÓN" if self.dup_simulate.get() else "REAL"
         mensaje = (f"Se eliminarán {len(selected_files)} archivo(s) en modo {modo}:\n\n"
                    f"{chr(10).join(['  • ' + f for f in selected_files[:10]])}")
-        
         if len(selected_files) > 10:
             mensaje += f"\n  ... y {len(selected_files) - 10} más"
-        
         if not messagebox.askyesno("Confirmar eliminación", mensaje):
             return
-        
         self.status_text.set(f"Eliminando {len(selected_files)} archivos...")
-        
-        # Guardamos el modo para saber si fue simulación
         self.last_delete_was_simulation = self.dup_simulate.get()
-        
         thread = threading.Thread(target=self._run_delete_selected, args=(selected_files,))
+        thread.daemon = True
         thread.start()
 
     def _run_delete_selected(self, selected_files):
-        resultados = {
-            'eliminados': [],
-            'errores': [],
-            'espacio_liberado': 0
-        }
-        
+        resultados = {'eliminados': [], 'errores': [], 'espacio_liberado': 0}
         modo_simulacion = self.dup_simulate.get()
-        
         for ruta_str in selected_files:
             ruta = Path(ruta_str)
             try:
@@ -931,59 +1047,44 @@ class DownloadsOrganizerGUI:
                         try:
                             from send2trash import send2trash
                             send2trash(str(ruta))
-                            print(f"  🗑️ Movido a papelera: {ruta}")
+                            print(f"  ️ Movido a papelera: {ruta}")
                         except ImportError:
                             ruta.unlink()
                             print(f"  ❌ Eliminado: {ruta}")
-                        
                         resultados['eliminados'].append(str(ruta))
                         try:
                             resultados['espacio_liberado'] += ruta.stat().st_size
                         except:
                             pass
-                
             except Exception as e:
                 error_msg = f"Error al eliminar {ruta}: {e}"
-                print(f"  ⚠️ {error_msg}")
+                print(f"  ️ {error_msg}")
                 resultados['errores'].append(error_msg)
-        
         espacio_human = GrupoDuplicados._tamano_human(resultados['espacio_liberado'])
         modo_str = "SIMULACIÓN" if modo_simulacion else "REAL"
-        
         mensaje = (f"Operación completada en modo {modo_str}\n\n"
                    f"✅ Archivos procesados: {len(resultados['eliminados'])}\n"
                    f"💾 Espacio liberado: {espacio_human}")
-        
         if resultados['errores']:
-            mensaje += f"\n\n⚠️ Errores: {len(resultados['errores'])}"
-        
+            mensaje += f"\n\n️ Errores: {len(resultados['errores'])}"
         self.root.after(0, lambda: messagebox.showinfo("Resultado", mensaje))
         self.root.after(0, lambda: self.status_text.set(f"Eliminación completada: {len(resultados['eliminados'])} archivos"))
-        
-        # Activar Deshacer inmediatamente después de eliminar (tanto real como simulación)
         self.root.after(500, self._activate_undo_after_delete)
-        
         if not modo_simulacion:
             self.root.after(1000, lambda: self._refresh_after_deletion())
 
     def _activate_undo_after_delete(self):
-        """Activa el botón Deshacer inmediatamente después de eliminar archivos."""
         if self.undo_manager:
             try:
                 history = self.undo_manager.get_history()
                 undo_count = history['undo_count']
-                
-                # Actualizar etiqueta
                 if self.last_delete_was_simulation:
-                    # Simulación: mostrar contador de 0 pero activar botón con mensaje especial
                     self.undo_redo_label.config(
-                        text=f"↩️ Deshacer: 0 disponibles (simulación)  |  ↪️ Rehacer: 0 disponibles"
+                        text=f"️ Deshacer: 0 disponibles (simulación)  |  ↪️ Rehacer: 0 disponibles"
                     )
-                    # Activar botón Deshacer aunque no haya acciones reales
                     self.undo_button.config(state=tk.NORMAL)
-                    self.status_text.set("🧪 Simulación completada. Puedes probar Deshacer (no hay cambios reales).")
+                    self.status_text.set(" Simulación completada. Puedes probar Deshacer (no hay cambios reales).")
                     self.redo_button.config(state=tk.DISABLED)
-                    print("   ✅ Botón Deshacer activado en modo simulación")
                 else:
                     if undo_count > 0:
                         self.undo_button.config(state=tk.NORMAL)
@@ -994,7 +1095,6 @@ class DownloadsOrganizerGUI:
                     self.undo_redo_label.config(
                         text=f"↩️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: 0 disponibles"
                     )
-                    print(f"   ✅ Botón Deshacer activado: {undo_count} acciones disponibles")
             except Exception as e:
                 print(f"   ⚠️ Error al activar Deshacer: {e}")
 
@@ -1005,7 +1105,6 @@ class DownloadsOrganizerGUI:
         self.dup_selected_files.clear()
         self.current_detector = None
         self.current_reporte = None
-        
         self.dup_summary_label.config(text="")
         if hasattr(self, 'dup_placeholder'):
             self.dup_placeholder.pack(pady=50)
@@ -1017,13 +1116,10 @@ class DownloadsOrganizerGUI:
         self.dup_selected_files.clear()
         self.current_detector = None
         self.current_reporte = None
-        
         self.dup_summary_label.config(text="")
         if hasattr(self, 'dup_placeholder'):
             self.dup_placeholder.pack(pady=50)
-        
         self.status_text.set("Resultados limpiados")
-        # Resetear flag de simulación
         self.last_delete_was_simulation = False
         self._update_undo_redo_panel()
 
@@ -1036,7 +1132,6 @@ class DownloadsOrganizerGUI:
                 self.undo_redo_label.config(
                     text=f"↩️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: {redo_count} disponibles"
                 )
-                # Si estamos en simulación, no desactivar el botón aunque undo_count sea 0
                 if self.last_delete_was_simulation:
                     self.undo_button.config(state=tk.NORMAL)
                 else:
@@ -1050,33 +1145,24 @@ class DownloadsOrganizerGUI:
             self.redo_button.config(state=tk.DISABLED)
 
     def _do_undo(self):
-        # Si la última operación fue simulación, mostrar mensaje informativo
         if self.last_delete_was_simulation:
-            messagebox.showinfo("Modo simulación", 
-                              "Esta operación fue una simulación, no se realizaron cambios reales.\n"
-                              "No hay nada que deshacer.")
+            messagebox.showinfo("Modo simulación", "Esta operación fue una simulación, no se realizaron cambios reales.\nNo hay nada que deshacer.")
             return
-        
         if not self.undo_manager:
             messagebox.showwarning("No disponible", "El sistema Undo/Redo no está disponible.")
             return
-        
         try:
             history = self.undo_manager.get_history()
             if history['undo_count'] == 0:
                 messagebox.showinfo("Sin acciones", "No hay acciones para deshacer.")
                 return
-            
-            if not messagebox.askyesno("Confirmar Deshacer", 
-                                       "¿Estás seguro de que deseas deshacer la última operación?\n\n"
-                                       "Los archivos volverán a su ubicación original."):
+            if not messagebox.askyesno("Confirmar Deshacer", "¿Estás seguro de que deseas deshacer la última operación?\n\nLos archivos volverán a su ubicación original."):
                 return
-            
             self.status_text.set("Deshaciendo última operación...")
             self.output_text.delete(1.0, tk.END)
             self.output_text.insert(tk.END, "🔄 Ejecutando operación de deshacer...\n\n")
-            
             thread = threading.Thread(target=self._run_undo)
+            thread.daemon = True
             thread.start()
         except Exception as e:
             messagebox.showerror("Error", f"Error al deshacer: {str(e)}")
@@ -1089,9 +1175,7 @@ class DownloadsOrganizerGUI:
                 action_info = f"Archivo: {last_action.get('source', 'desconocido')}"
             else:
                 action_info = ""
-            
             success, msg = self.undo_manager.undo()
-            
             self.root.after(0, lambda: self._handle_undo_result_with_feedback(success, msg, "Deshacer", action_info))
         except Exception as e:
             self.root.after(0, lambda: self.output_text.insert(tk.END, f"❌ Error: {str(e)}\n"))
@@ -1104,35 +1188,25 @@ class DownloadsOrganizerGUI:
             self.output_text.insert(tk.END, f"   📄 {action_info}\n")
         self.output_text.insert(tk.END, f"   🔄 Los archivos han vuelto a su ubicación original\n\n")
         self.output_text.see(tk.END)
-        
-        # Cambiar mensaje de la barra de estado
         self.status_text.set("Operación exitosa - Archivos recuperados")
-        
-        # Después de un undo real, resetear el flag de simulación
         self.last_delete_was_simulation = False
-        
         if self.undo_manager:
             try:
                 history = self.undo_manager.get_history()
                 redo_count = history['redo_count']
                 undo_count = history['undo_count']
                 self.undo_redo_label.config(
-                    text=f"↩️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: {redo_count} disponibles"
+                    text=f"️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: {redo_count} disponibles"
                 )
                 self.undo_button.config(state=tk.NORMAL if undo_count > 0 else tk.DISABLED)
                 self.redo_button.config(state=tk.NORMAL if redo_count > 0 else tk.DISABLED)
-                
-                # Activar Rehacer y mostrar mensaje si hay acciones de redo
                 if redo_count > 0:
                     self.status_text.set("Archivos recuperados. Usa 'Rehacer' para eliminar permanentemente.")
             except Exception as e:
                 print(f"Error al actualizar panel: {e}")
-        
-        # Mostrar mensaje de recuperación en el área de texto y popup
         self._show_restored_files_feedback()
 
     def _show_restored_files_feedback(self):
-        """Muestra mensaje claro de que los archivos fueron recuperados."""
         self.dup_text.config(state=tk.NORMAL)
         self.dup_text.insert(tk.END, "\n" + "="*60 + "\n")
         self.dup_text.insert(tk.END, "✅ ARCHIVOS RECUPERADOS EXITOSAMENTE\n", 'restored')
@@ -1141,34 +1215,24 @@ class DownloadsOrganizerGUI:
         self.dup_text.insert(tk.END, "🔄 Puedes usar 'Rehacer' si deseas volver a eliminarlos.\n\n")
         self.dup_text.config(state=tk.DISABLED)
         self.dup_text.see(tk.END)
-        
-        # Popup informativo
-        messagebox.showinfo("✅ Archivos Recuperados", 
-                          "Los archivos han sido recuperados exitosamente.\n\n"
-                          "Los archivos están ahora en su ubicación original.\n\n"
-                          "Usa 'Rehacer' si deseas volver a eliminarlos.")
+        messagebox.showinfo("✅ Archivos Recuperados", "Los archivos han sido recuperados exitosamente.\n\nLos archivos están ahora en su ubicación original.\n\nUsa 'Rehacer' si deseas volver a eliminarlos.")
 
     def _do_redo(self):
         if not self.undo_manager:
             messagebox.showwarning("No disponible", "El sistema Undo/Redo no está disponible.")
             return
-        
         try:
             history = self.undo_manager.get_history()
             if history['redo_count'] == 0:
                 messagebox.showinfo("Sin acciones", "No hay acciones para rehacer.")
                 return
-            
-            if not messagebox.askyesno("Confirmar Rehacer", 
-                                       "¿Estás seguro de que deseas rehacer la última operación?\n\n"
-                                       "Los archivos volverán a ser eliminados permanentemente."):
+            if not messagebox.askyesno("Confirmar Rehacer", "¿Estás seguro de que deseas rehacer la última operación?\n\nLos archivos volverán a ser eliminados permanentemente."):
                 return
-            
             self.status_text.set("Rehaciendo última operación...")
             self.output_text.delete(1.0, tk.END)
             self.output_text.insert(tk.END, "🔄 Ejecutando operación de rehacer...\n\n")
-            
             thread = threading.Thread(target=self._run_redo)
+            thread.daemon = True
             thread.start()
         except Exception as e:
             messagebox.showerror("Error", f"Error al rehacer: {str(e)}")
@@ -1176,20 +1240,17 @@ class DownloadsOrganizerGUI:
     def _run_redo(self):
         try:
             success, msg = self.undo_manager.redo()
-            
             self.root.after(0, lambda: self._handle_redo_result(success, msg, "Rehacer"))
         except Exception as e:
-            self.root.after(0, lambda: self.output_text.insert(tk.END, f"❌ Error: {str(e)}\n"))
+            self.root.after(0, lambda: self.output_text.insert(tk.END, f" Error: {str(e)}\n"))
             self.root.after(0, lambda: self.status_text.set("Error al rehacer"))
 
     def _handle_redo_result(self, success, msg, operation):
         icon = "✅" if success else "❌"
         self.output_text.insert(tk.END, f"{icon} {operation}: {msg}\n")
-        self.output_text.insert(tk.END, f"   ⚠️ Los archivos han sido eliminados nuevamente\n\n")
+        self.output_text.insert(tk.END, f"   ️ Los archivos han sido eliminados nuevamente\n\n")
         self.output_text.see(tk.END)
-        
         self.status_text.set("Rehacer exitoso - Archivos eliminados permanentemente")
-        
         if self.undo_manager:
             try:
                 history = self.undo_manager.get_history()
@@ -1200,8 +1261,6 @@ class DownloadsOrganizerGUI:
                 )
                 self.undo_button.config(state=tk.NORMAL if undo_count > 0 else tk.DISABLED)
                 self.redo_button.config(state=tk.NORMAL if redo_count > 0 else tk.DISABLED)
-                
-                # Si hay acciones de deshacer, sugerir que se puede deshacer
                 if undo_count > 0:
                     self.status_text.set("Archivos eliminados. Usa 'Deshacer' para recuperarlos.")
             except Exception as e:
@@ -1213,7 +1272,6 @@ class DownloadsOrganizerGUI:
         self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var,
                                             style="ios.Horizontal.TProgressbar", maximum=100)
         self.progress_bar.pack(fill=tk.X)
-
         status_bar = ttk.Label(self.root, textvariable=self.status_text,
                                bootstyle="secondary", padding=10, anchor=tk.W)
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -1222,7 +1280,6 @@ class DownloadsOrganizerGUI:
         theme = "darkly" if self.dark_mode.get() else "cosmo"
         self.style.theme_use(theme)
         self._setup_ios_styles()
-        
         if hasattr(self, 'theme_toggle'):
             self.theme_toggle.is_dark_mode = self.dark_mode.get()
             self.theme_toggle._update()
@@ -1234,6 +1291,10 @@ class DownloadsOrganizerGUI:
 
     def _on_simulate_change(self):
         self.status_text.set("Modo simulación: ACTIVADO" if self.simulate_mode.get() else "Modo simulación: DESACTIVADO")
+
+    def _on_interactive_change(self):
+        self.status_text.set("Modo interactivo: ACTIVADO" if self.interactive_mode.get() else "Modo interactivo: DESACTIVADO")
+        self._save_preferences()
 
     def _on_profile_change(self):
         profile = self.selected_profile.get()
@@ -1272,32 +1333,91 @@ class DownloadsOrganizerGUI:
             self.status_text.set(f"Config: {os.path.basename(f)}")
 
     def _run_organizer(self):
-        cmd = [sys.executable, "src/organizer.py"]
+        organizer_path = Path(__file__).parent.parent / "organizer.py"
+        cmd = [sys.executable, str(organizer_path)]
         if self.config_file.get():
             cmd.extend(["--config", self.config_file.get()])
         if self.simulate_mode.get():
             cmd.append("--simulate")
+        if self.interactive_mode.get():
+            cmd.append("--interactive")
 
         self.output_text.delete(1.0, tk.END)
         self.status_text.set("Ejecutando...")
         self.run_button.config(state=tk.DISABLED)
         self.progress_var.set(0)
 
+        if self.interactive_mode.get():
+            self.interactive_info_label.config(
+                text="⚠️ Modo interactivo activo. Se abrirán ventanas para tomar decisiones.",
+                bootstyle="warning"
+            )
+            self.interactive_info_label.pack(fill=tk.X, pady=5)
+        else:
+            self.interactive_info_label.pack_forget()
+
+        if self.current_process and self.process_alive:
+            try:
+                self.current_process.terminate()
+                self.current_process.wait(timeout=1)
+            except:
+                pass
+
         thread = threading.Thread(target=self._run_subprocess, args=(cmd,))
+        thread.daemon = True
         thread.start()
 
     def _run_subprocess(self, cmd):
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       text=True, bufsize=1)
+            use_stdin = self.interactive_mode.get()
+            stdin_arg = subprocess.PIPE if use_stdin else None
+
+            self.current_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=stdin_arg,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            self.process_alive = True
+
+            prompt_lines = []
+            capturing = False
             lines = 0
-            for line in process.stdout:
+
+            for line in self.current_process.stdout:
                 self.root.after(0, self._append_output, line)
+
+                # Detectar inicio del bloque de opciones
+                if "¿Qué deseas hacer" in line or "Qué deseas hacer" in line:
+                    capturing = True
+                    prompt_lines = [line]
+                    continue
+
+                if capturing:
+                    prompt_lines.append(line)
+                    if "Tu selección (número):" in line:
+                        full_prompt = "".join(prompt_lines)
+                        print(f"🎯 Mostrando diálogo interactivo")
+                        self.root.after(0, self._show_interactive_dialog, full_prompt)
+                        capturing = False
+                        prompt_lines = []
+                        continue
+
+                # Detectar prompt de recordar
+                if "¿Recordar esta decisión" in line or "Recordar esta decisión" in line:
+                    print(f"💾 Mostrando diálogo de recordar")
+                    self.root.after(0, self._show_remember_dialog, line)
+
                 lines += 1
                 progress = min(lines / 50 * 100, 90)
                 self.root.after(0, lambda p=progress: self.progress_var.set(p))
-            process.wait()
-            if process.returncode == 0:
+
+            self.current_process.wait()
+            self.process_alive = False
+            if self.current_process.returncode == 0:
                 self.root.after(0, lambda: self.progress_var.set(100))
                 self.root.after(0, lambda: self.status_text.set("Completado exitosamente"))
                 self.root.after(500, self._update_undo_redo_panel)
@@ -1308,6 +1428,35 @@ class DownloadsOrganizerGUI:
             self.root.after(0, lambda: self.status_text.set("Error interno"))
         finally:
             self.root.after(0, lambda: self.run_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.interactive_info_label.pack_forget())
+            self.process_alive = False
+
+    def _show_interactive_dialog(self, prompt_text):
+        """Muestra el diálogo interactivo con radio buttons."""
+        print(f"📋 Prompt recibido:\n{prompt_text}")
+        options = []
+        for line in prompt_text.splitlines():
+            match = re.match(r'\s*\[(\d+)\]\s*(.+)', line)
+            if match:
+                num = int(match.group(1))
+                desc = match.group(2).strip()
+                options.append((num, desc))
+        
+        print(f"✅ Opciones parseadas: {options}")
+        
+        if options and self.current_process and self.current_process.stdin:
+            dialog = InteractiveDialog(self.root, prompt_text, options, self.current_process.stdin,
+                                       title="Selecciona una categoría")
+            print("✅ Diálogo mostrado")
+        else:
+            print(f"❌ No se puede mostrar diálogo:")
+            print(f"   - Opciones: {len(options)}")
+            print(f"   - Proceso: {self.current_process is not None}")
+            print(f"   - Stdin: {self.current_process.stdin if self.current_process else None}")
+
+    def _show_remember_dialog(self, prompt_text):
+        if self.current_process and self.current_process.stdin:
+            dialog = RememberDialog(self.root, prompt_text, self.current_process.stdin)
 
     def _append_output(self, text):
         self.output_text.insert(tk.END, text)
@@ -1319,7 +1468,8 @@ class DownloadsOrganizerGUI:
         self.status_text.set("Salida limpiada")
 
     def _load_stats(self):
-        cmd = [sys.executable, "src/organizer.py", "--stats"]
+        organizer_path = Path(__file__).parent.parent / "organizer.py"
+        cmd = [sys.executable, str(organizer_path), "--stats"]
         self.stats_text.delete(1.0, tk.END)
         self.status_text.set("Cargando estadísticas...")
         try:

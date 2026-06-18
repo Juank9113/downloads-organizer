@@ -6,6 +6,7 @@ Características:
 - Organización automática basada en configuración JSON.
 - Modo simulación (--simulate).
 - Modo estadísticas (--stats).
+- Modo interactivo (--interactive) para archivos ambiguos.
 - Integración con sistema Undo/Redo (--undo / --redo).
 - Registro automático de movimientos en el historial.
 
@@ -21,7 +22,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-# Asegurar que podemos importar módulos hermanos (como undo_manager)
+# Asegurar que podemos importar módulos hermanos
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 
@@ -30,6 +31,13 @@ try:
 except ImportError:
     print("⚠️ No se pudo importar undo_manager.py. Asegúrate de que esté en la misma carpeta.")
     sys.exit(1)
+
+try:
+    from interactive_mode import InteractiveMode, process_interactive_files
+except ImportError:
+    print("️ No se pudo importar interactive_mode.py. Asegúrate de que esté en la misma carpeta.")
+    InteractiveMode = None
+    process_interactive_files = None
 
 # Configuración de logging
 logging.basicConfig(
@@ -72,7 +80,7 @@ def get_category(filename: str, categories: dict) -> str:
     return "Otros"
 
 
-def organize_files(config: dict, simulate: bool = False):
+def organize_files(config: dict, simulate: bool = False, interactive: bool = False):
     """Función principal para organizar los archivos."""
     downloads_dir = Path(config["downloads_dir"])
     organized_dir = Path(config["organized_dir"])
@@ -88,38 +96,68 @@ def organize_files(config: dict, simulate: bool = False):
 
     # Inicializar el gestor de Undo
     undo_mgr = UndoManager()
+    
+    # Inicializar modo interactivo si está activado
+    interactive_mode = None
+    if interactive and InteractiveMode:
+        interactive_mode = InteractiveMode()
+        logger.info(" MODO INTERACTIVO ACTIVADO - Se preguntará por archivos ambiguos")
 
     files_moved = 0
     files_skipped = 0
+    files_interactive = 0
     stats = {}
 
     logger.info(f"🔍 Analizando carpeta: {downloads_dir}")
     if simulate:
         logger.info("🧪 MODO SIMULACIÓN ACTIVADO - No se moverán archivos reales")
 
-    # Iterar sobre archivos en la carpeta de descargas (no recursivo por defecto para evitar bucles)
+    # Recopilar archivos con extensiones no reconocidas para modo interactivo
+    ambiguous_files = []
+    normal_files = []
+
     for item in downloads_dir.iterdir():
         if item.is_file():
             category = get_category(item.name, categories)
-            
-            # Actualizar estadísticas
-            stats[category] = stats.get(category, 0) + 1
-            
-            dest_folder = organized_dir / category
-            dest_file = dest_folder / item.name
+            if category == "Otros" and interactive_mode:
+                ambiguous_files.append(item)
+            else:
+                normal_files.append((item, category))
 
-            # Evitar mover el archivo sobre sí mismo
-            if item.resolve() == dest_file.resolve():
+    # Procesar modo interactivo primero si hay archivos ambiguos
+    if ambiguous_files and interactive_mode:
+        logger.info(f"\n📋 Se encontraron {len(ambiguous_files)} archivos con extensiones no reconocidas")
+        
+        results = process_interactive_files(
+            ambiguous_files,
+            categories,
+            mode='cli',
+            decisions_file=Path.home() / ".downloads_organizer_decisions.json"
+        )
+        
+        # Procesar resultados del modo interactivo
+        for file_path_str, action in results.items():
+            file_path = Path(file_path_str)
+            
+            if action == 'skip' or action == 'keep':
+                logger.info(f"  ⏭️ {file_path.name} - Mantenido en Downloads")
+                files_skipped += 1
                 continue
-
+            
+            # Si es una nueva categoría, añadirla a las categorías
+            if action not in categories:
+                categories[action] = []
+                logger.info(f"  ✨ Nueva categoría creada: {action}")
+            
+            dest_folder = organized_dir / action
+            dest_file = dest_folder / file_path.name
+            
             if simulate:
-                logger.info(f"  [SIMULACIÓN] {item.name} -> {category}/{item.name}")
+                logger.info(f"  [SIMULACIÓN] {file_path.name} -> {action}/{file_path.name}")
                 files_moved += 1
             else:
-                # Crear carpeta de categoría si no existe
                 dest_folder.mkdir(parents=True, exist_ok=True)
                 
-                # Manejar conflictos de nombre
                 if dest_file.exists():
                     stem = dest_file.stem
                     suffix = dest_file.suffix
@@ -128,28 +166,62 @@ def organize_files(config: dict, simulate: bool = False):
                         dest_file = dest_folder / f"{stem}_{counter}{suffix}"
                         counter += 1
                     logger.warning(f"  ⚠️ Nombre en conflicto. Renombrado a: {dest_file.name}")
-
+                
                 try:
-                    # Mover archivo
-                    shutil.move(str(item), str(dest_file))
-                    
-                    # Registrar en el historial de Undo
-                    undo_mgr.record_action('move', str(item), str(dest_file))
-                    
-                    logger.info(f"  ✅ Movido: {item.name} -> {category}/{dest_file.name}")
+                    shutil.move(str(file_path), str(dest_file))
+                    undo_mgr.record_action('move', str(file_path), str(dest_file))
+                    logger.info(f"  ✅ Movido: {file_path.name} -> {action}/{dest_file.name}")
                     files_moved += 1
+                    stats[action] = stats.get(action, 0) + 1
                 except Exception as e:
-                    logger.error(f"  ❌ Error al mover {item.name}: {e}")
+                    logger.error(f"  ❌ Error al mover {file_path.name}: {e}")
                     files_skipped += 1
+        
+        files_interactive = len(ambiguous_files)
+
+    # Procesar archivos normales (conocidos)
+    for item, category in normal_files:
+        stats[category] = stats.get(category, 0) + 1
+        
+        dest_folder = organized_dir / category
+        dest_file = dest_folder / item.name
+
+        if item.resolve() == dest_file.resolve():
+            continue
+
+        if simulate:
+            logger.info(f"  [SIMULACIÓN] {item.name} -> {category}/{item.name}")
+            files_moved += 1
+        else:
+            dest_folder.mkdir(parents=True, exist_ok=True)
+            
+            if dest_file.exists():
+                stem = dest_file.stem
+                suffix = dest_file.suffix
+                counter = 1
+                while dest_file.exists():
+                    dest_file = dest_folder / f"{stem}_{counter}{suffix}"
+                    counter += 1
+                logger.warning(f"  ⚠️ Nombre en conflicto. Renombrado a: {dest_file.name}")
+
+            try:
+                shutil.move(str(item), str(dest_file))
+                undo_mgr.record_action('move', str(item), str(dest_file))
+                logger.info(f"  ✅ Movido: {item.name} -> {category}/{dest_file.name}")
+                files_moved += 1
+            except Exception as e:
+                logger.error(f"  ❌ Error al mover {item.name}: {e}")
+                files_skipped += 1
 
     # Resumen
     logger.info("="*50)
     logger.info(f"📊 RESUMEN:")
-    logger.info(f"   Archivos procesados: {files_moved + files_skipped}")
+    logger.info(f"   Archivos procesados: {files_moved + files_skipped + files_interactive}")
     logger.info(f"   Movidos exitosamente: {files_moved}")
     logger.info(f"   Omitidos/Error: {files_skipped}")
+    if interactive:
+        logger.info(f"   Archivos interactivos: {files_interactive}")
     
-    # Formatear la distribución para que sea legible (ej: Archivos Comprimidos -> 1)
     if stats:
         dist_parts = [f"Archivos {categoria} -> {cantidad}" for categoria, cantidad in stats.items()]
         dist_text = ", ".join(dist_parts)
@@ -173,7 +245,7 @@ def show_stats(config: dict):
         print(f"   - Archivos: {len(files)}")
         print(f"   - Tamaño total: {size / (1024*1024):.2f} MB")
     else:
-        print(f"️ Carpeta Origen no encontrada.")
+        print(f"⚠️ Carpeta Origen no encontrada.")
 
     if organized_dir.exists():
         categories = [d for d in organized_dir.iterdir() if d.is_dir()]
@@ -206,6 +278,7 @@ def main():
     parser.add_argument("--stats", action="store_true", help="Mostrar estadísticas de uso")
     parser.add_argument("--undo", action="store_true", help="Deshacer la última operación de organización")
     parser.add_argument("--redo", action="store_true", help="Rehacer la última operación deshecha")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Activar modo interactivo para archivos ambiguos")
     
     args = parser.parse_args()
 
@@ -222,7 +295,7 @@ def main():
     if args.redo:
         undo_mgr = UndoManager()
         success, msg = undo_mgr.redo()
-        print(f"{'✅' if success else ''} {msg}")
+        print(f"{'✅' if success else '❌'} {msg}")
         return
 
     # Mostrar estadísticas
@@ -230,8 +303,8 @@ def main():
         show_stats(config)
         return
 
-    # Ejecutar organización normal
-    organize_files(config, simulate=args.simulate)
+    # Ejecutar organización normal o interactiva
+    organize_files(config, simulate=args.simulate, interactive=args.interactive)
 
 
 if __name__ == "__main__":
