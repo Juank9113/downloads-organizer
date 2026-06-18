@@ -1,251 +1,237 @@
 #!/usr/bin/env python3
 """
-Organizador Automático de Descargas
+organizer.py - Núcleo del Downloads Organizer Pro.
+
+Características:
+- Organización automática basada en configuración JSON.
+- Modo simulación (--simulate).
+- Modo estadísticas (--stats).
+- Integración con sistema Undo/Redo (--undo / --redo).
+- Registro automático de movimientos en el historial.
+
 Autor: Juan Carlos Blanco Ruiz
-Email: juancarlosblancoruiz@gmail.com
-Mueve archivos de ~/Downloads a carpetas según su tipo
 """
+
 import os
-import shutil
 import sys
 import json
+import shutil
 import argparse
+import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
 
-# Configuración por defecto
+# Asegurar que podemos importar módulos hermanos (como undo_manager)
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
+try:
+    from undo_manager import UndoManager
+except ImportError:
+    print("⚠️ No se pudo importar undo_manager.py. Asegúrate de que esté en la misma carpeta.")
+    sys.exit(1)
+
+# Configuración de logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Configuración por defecto si no se proporciona un archivo
 DEFAULT_CONFIG = {
     "downloads_dir": str(Path.home() / "Downloads"),
     "organized_dir": str(Path.home() / "Downloads_Organized"),
     "categories": {
-        "Imagenes": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".ico"],
-        "Documentos": [".pdf", ".docx", ".doc", ".txt", ".xlsx", ".pptx", ".odt", ".rtf", ".md"],
-        "Videos": [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"],
-        "Musica": [".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"],
-        "Archivos_Comprimidos": [".zip", ".rar", ".tar", ".gz", ".7z", ".bz2", ".xz"],
-        "Programas": [".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".AppImage", ".sh"],
-        "Codigo": [".py", ".js", ".html", ".css", ".cpp", ".java", ".json", ".xml", ".yaml", ".yml"],
-        "Otros": []
-    },
-    "exclude_extensions": [".tmp", ".temp", ".crdownload", ".part"],
-    "log_level": "INFO",
-    "notifications": False
+        "Imagenes": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp"],
+        "Videos": [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm"],
+        "Documentos": [".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".xls", ".xlsx", ".ppt", ".pptx"],
+        "Audio": [".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a"],
+        "Comprimidos": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2"],
+        "Codigo": [".py", ".js", ".html", ".css", ".json", ".xml", ".java", ".cpp", ".c", ".h", ".php", ".rb", ".go", ".rs"],
+        "Ejecutables": [".exe", ".msi", ".deb", ".rpm", ".app", ".dmg", ".sh", ".bat"]
+    }
 }
 
 
-class DownloadsOrganizer:
-    """Clase principal para organizar archivos de descargas"""
-    
-    def __init__(self, config_path: Optional[str] = None):
-        """Inicializa el organizador con la configuración especificada"""
-        self.config = self._load_config(config_path)
-        # USAR expanduser() PARA EXPANDIR EL ~ A LA RUTA DEL HOME
-        self.downloads_dir = Path(self.config["downloads_dir"]).expanduser()
-        self.organized_dir = Path(self.config["organized_dir"]).expanduser()
-        self.categories = self.config["categories"]
-        self.exclude_extensions = self.config["exclude_extensions"]
-        self.stats = {"moved": 0, "errors": 0, "skipped": 0}
+def load_config(config_path: str = None) -> dict:
+    """Carga la configuración desde un archivo JSON o usa la predeterminada."""
+    if config_path and Path(config_path).exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return DEFAULT_CONFIG
 
-    def _load_config(self, config_path: Optional[str]) -> Dict:
-        """Carga la configuración desde un archivo JSON"""
-        config = DEFAULT_CONFIG.copy()
-        if config_path and Path(config_path).exists():
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    user_config = json.load(f)
-                    config.update(user_config)
-                print(f"✅ Configuración cargada desde {config_path}")
-            except Exception as e:
-                print(f"⚠️ Error cargando configuración: {e}. Usando configuración por defecto.")
-        return config
 
-    def create_category_folders(self) -> None:
-        """Crea las carpetas de categorías si no existen"""
-        for category in self.categories.keys():
-            folder_path = self.organized_dir / category
-            folder_path.mkdir(parents=True, exist_ok=True)
+def get_category(filename: str, categories: dict) -> str:
+    """Determina la categoría de un archivo basado en su extensión."""
+    ext = Path(filename).suffix.lower()
+    for category, extensions in categories.items():
+        if ext in extensions:
+            return category
+    return "Otros"
 
-    def get_file_category(self, file_extension: str) -> str:
-        """
-        Determina la categoría según la extensión del archivo
-        Args:
-            file_extension: Extensión del archivo (ej: .pdf)
-        Returns:
-            Nombre de la categoría
-        """
-        file_extension = file_extension.lower()
-        if file_extension in self.exclude_extensions:
-            return "EXCLUDED"
-        for category, extensions in self.categories.items():
-            if file_extension in extensions:
-                return category
-        return "Otros"
 
-    def get_unique_filename(self, target_path: Path) -> Path:
-        """
-        Genera un nombre único si el archivo ya existe
-        Args:
-            target_path: Ruta destino original
-        Returns:
-            Ruta con nombre único
-        """
-        if not target_path.exists():
-            return target_path
-        counter = 1
-        stem = target_path.stem
-        suffix = target_path.suffix
-        parent = target_path.parent
-        while True:
-            new_name = f"{stem}_{counter}{suffix}"
-            new_path = parent / new_name
-            if not new_path.exists():
-                return new_path
-            counter += 1
+def organize_files(config: dict, simulate: bool = False):
+    """Función principal para organizar los archivos."""
+    downloads_dir = Path(config["downloads_dir"])
+    organized_dir = Path(config["organized_dir"])
+    categories = config.get("categories", {})
 
-    def organize_file(self, file_path: Path) -> Tuple[bool, str]:
-        """
-        Organiza un archivo individual
-        Args:
-            file_path: Ruta del archivo a organizar
-        Returns:
-            (éxito, mensaje)
-        """
-        try:
-            file_extension = file_path.suffix
-            category = self.get_file_category(file_extension)
-            
-            if category == "EXCLUDED":
-                self.stats["skipped"] += 1
-                return True, f"️ {file_path.name}: Excluido"
-            
-            dest_folder = self.organized_dir / category
-            # CREAR CARPETA SI NO EXISTE
-            dest_folder.mkdir(parents=True, exist_ok=True)
-            
-            dest_path = dest_folder / file_path.name
-            dest_path = self.get_unique_filename(dest_path)
-            
-            shutil.move(str(file_path), str(dest_path))
-            self.stats["moved"] += 1
-            return True, f"✅ {file_path.name} → {category}/"
-            
-        except PermissionError:
-            self.stats["errors"] += 1
-            return False, f"❌ {file_path.name}: Permiso denegado"
-        except Exception as e:
-            self.stats["errors"] += 1
-            return False, f"❌ {file_path.name}: {str(e)}"
+    if not downloads_dir.exists():
+        logger.error(f"La carpeta de origen no existe: {downloads_dir}")
+        return
 
-    def organize_all(self, simulate: bool = False) -> None:
-        """
-        Organiza todos los archivos en la carpeta de descargas
-        Args:
-            simulate: Si es True, solo simula sin mover archivos
-        """
-        if not self.downloads_dir.exists():
-            print(f"❌ La carpeta {self.downloads_dir} no existe")
-            return
+    # Crear carpeta de destino si no existe (y no estamos en simulación)
+    if not simulate:
+        organized_dir.mkdir(parents=True, exist_ok=True)
+
+    # Inicializar el gestor de Undo
+    undo_mgr = UndoManager()
+
+    files_moved = 0
+    files_skipped = 0
+    stats = {}
+
+    logger.info(f"🔍 Analizando carpeta: {downloads_dir}")
+    if simulate:
+        logger.info("🧪 MODO SIMULACIÓN ACTIVADO - No se moverán archivos reales")
+
+    # Iterar sobre archivos en la carpeta de descargas (no recursivo por defecto para evitar bucles)
+    for item in downloads_dir.iterdir():
+        if item.is_file():
+            category = get_category(item.name, categories)
             
-        if simulate:
-            print("🔍 MODO SIMULACIÓN - No se moverán archivos realmente")
-        else:
-            self.create_category_folders()
+            # Actualizar estadísticas
+            stats[category] = stats.get(category, 0) + 1
             
-        print(f"\n📁 Organizando archivos en {self.downloads_dir}...")
-        print("=" * 60)
-        
-        files = [f for f in self.downloads_dir.iterdir() if f.is_file()]
-        
-        if not files:
-            print("📭 No hay archivos para organizar")
-            return
-            
-        for file_path in files:
+            dest_folder = organized_dir / category
+            dest_file = dest_folder / item.name
+
+            # Evitar mover el archivo sobre sí mismo
+            if item.resolve() == dest_file.resolve():
+                continue
+
             if simulate:
-                extension = file_path.suffix
-                category = self.get_file_category(extension)
-                if category == "EXCLUDED":
-                    print(f"⏭️ [SIM] {file_path.name} → Excluido")
-                else:
-                    print(f"🔄 [SIM] {file_path.name} → {category}/")
-                self.stats["moved" if category != "EXCLUDED" else "skipped"] += 1
+                logger.info(f"  [SIMULACIÓN] {item.name} -> {category}/{item.name}")
+                files_moved += 1
             else:
-                success, message = self.organize_file(file_path)
-                print(message)
+                # Crear carpeta de categoría si no existe
+                dest_folder.mkdir(parents=True, exist_ok=True)
                 
-        self.show_summary(simulate)
+                # Manejar conflictos de nombre
+                if dest_file.exists():
+                    stem = dest_file.stem
+                    suffix = dest_file.suffix
+                    counter = 1
+                    while dest_file.exists():
+                        dest_file = dest_folder / f"{stem}_{counter}{suffix}"
+                        counter += 1
+                    logger.warning(f"  ⚠️ Nombre en conflicto. Renombrado a: {dest_file.name}")
 
-    def show_summary(self, simulate: bool = False) -> None:
-        """Muestra un resumen de la operación"""
-        print("=" * 60)
-        if simulate:
-            print("📊 RESUMEN DE SIMULACIÓN:")
-        else:
-            print("📊 RESUMEN:")
-        print(f"   📦 Movidos: {self.stats['moved']}")
-        print(f"   ️ Errores: {self.stats['errors']}")
-        print(f"   ⏭️ Excluidos: {self.stats['skipped']}")
-        print(f"   📁 Total procesados: {sum(self.stats.values())}")
-        if not simulate:
-            print(f"\n📂 Archivos organizados en: {self.organized_dir}")
+                try:
+                    # Mover archivo
+                    shutil.move(str(item), str(dest_file))
+                    
+                    # Registrar en el historial de Undo
+                    undo_mgr.record_action('move', str(item), str(dest_file))
+                    
+                    logger.info(f"  ✅ Movido: {item.name} -> {category}/{dest_file.name}")
+                    files_moved += 1
+                except Exception as e:
+                    logger.error(f"  ❌ Error al mover {item.name}: {e}")
+                    files_skipped += 1
 
-    def show_stats(self) -> None:
-        """Muestra estadísticas de archivos ya organizados"""
-        if not self.organized_dir.exists():
-            print("📊 Aún no hay archivos organizados")
-            return
-            
-        print("\n📊 ESTADÍSTICAS DE ARCHIVOS ORGANIZADOS")
-        print("=" * 60)
+    # Resumen
+    logger.info("="*50)
+    logger.info(f"📊 RESUMEN:")
+    logger.info(f"   Archivos procesados: {files_moved + files_skipped}")
+    logger.info(f"   Movidos exitosamente: {files_moved}")
+    logger.info(f"   Omitidos/Error: {files_skipped}")
+    
+    # Formatear la distribución para que sea legible (ej: Archivos Comprimidos -> 1)
+    if stats:
+        dist_parts = [f"Archivos {categoria} -> {cantidad}" for categoria, cantidad in stats.items()]
+        dist_text = ", ".join(dist_parts)
+        logger.info(f"   Distribución: {dist_text}")
+        
+    logger.info("="*50)
+
+
+def show_stats(config: dict):
+    """Muestra estadísticas básicas de las carpetas."""
+    downloads_dir = Path(config["downloads_dir"])
+    organized_dir = Path(config["organized_dir"])
+
+    print(f"\n📊 ESTADÍSTICAS DEL SISTEMA")
+    print(f"{'='*40}")
+    
+    if downloads_dir.exists():
+        files = list(downloads_dir.iterdir())
+        size = sum(f.stat().st_size for f in files if f.is_file())
+        print(f"📂 Carpeta Origen ({downloads_dir.name}):")
+        print(f"   - Archivos: {len(files)}")
+        print(f"   - Tamaño total: {size / (1024*1024):.2f} MB")
+    else:
+        print(f"️ Carpeta Origen no encontrada.")
+
+    if organized_dir.exists():
+        categories = [d for d in organized_dir.iterdir() if d.is_dir()]
         total_files = 0
-        category_stats = {}
+        total_size = 0
+        for cat in categories:
+            cat_files = list(cat.rglob('*'))
+            total_files += len([f for f in cat_files if f.is_file()])
+            total_size += sum(f.stat().st_size for f in cat_files if f.is_file())
+            
+        print(f"\n📂 Carpeta Organizada ({organized_dir.name}):")
+        print(f"   - Categorías creadas: {len(categories)}")
+        print(f"   - Archivos totales: {total_files}")
+        print(f"   - Tamaño total: {total_size / (1024*1024):.2f} MB")
         
-        for category in self.categories.keys():
-            folder = self.organized_dir / category
-            if folder.exists():
-                files = [f for f in folder.iterdir() if f.is_file()]
-                count = len(files)
-                category_stats[category] = count
-                total_files += count
-                
-        for category, count in sorted(category_stats.items(), key=lambda x: x[1], reverse=True):
-            if count > 0:
-                bar_length = min(30, count // 5)
-                bar = "█" * bar_length
-                print(f"📁 {category:<20} {count:>5} archivos {bar}")
-                
-        print("=" * 60)
-        print(f" Total de archivos organizados: {total_files}")
-        
-        total_size = sum(f.stat().st_size for f in self.organized_dir.rglob("*") if f.is_file())
-        if total_size > 0:
-            size_gb = total_size / (1024**3)
-            size_mb = total_size / (1024**2)
-            if size_gb >= 1:
-                print(f" Tamaño total: {size_gb:.2f} GB")
-            else:
-                print(f"💾 Tamaño total: {size_mb:.2f} MB")
+        print(f"\n   Detalle por categoría:")
+        for cat in sorted(categories):
+            cat_files = [f for f in cat.rglob('*') if f.is_file()]
+            cat_size = sum(f.stat().st_size for f in cat_files)
+            print(f"   - {cat.name}: {len(cat_files)} archivos ({cat_size / (1024*1024):.2f} MB)")
+    else:
+        print(f"\n⚠️ Carpeta Organizada aún no existe.")
+    print(f"{'='*40}\n")
 
 
 def main():
-    """Función principal con línea de comandos"""
-    parser = argparse.ArgumentParser(
-        description="Organizador automático de archivos de descargas",
-        epilog="Ejemplo: python organizer.py --simulate --config custom_rules.json"
-    )
+    parser = argparse.ArgumentParser(description="Downloads Organizer Pro - CLI")
     parser.add_argument("--config", "-c", type=str, help="Ruta al archivo de configuración JSON")
-    parser.add_argument("--simulate", "-s", action="store_true", help="Simular organización sin mover archivos")
-    parser.add_argument("--stats", "-t", action="store_true", help="Mostrar estadísticas de archivos organizados")
-    parser.add_argument("--quiet", "-q", action="store_true", help="Modo silencioso (menos output)")
+    parser.add_argument("--simulate", "-s", action="store_true", help="Ejecutar en modo simulación")
+    parser.add_argument("--stats", action="store_true", help="Mostrar estadísticas de uso")
+    parser.add_argument("--undo", action="store_true", help="Deshacer la última operación de organización")
+    parser.add_argument("--redo", action="store_true", help="Rehacer la última operación deshecha")
     
     args = parser.parse_args()
-    organizer = DownloadsOrganizer(config_path=args.config)
-    
+
+    # Cargar configuración
+    config = load_config(args.config)
+
+    # Manejo de Undo/Redo
+    if args.undo:
+        undo_mgr = UndoManager()
+        success, msg = undo_mgr.undo()
+        print(f"{'✅' if success else ''} {msg}")
+        return
+
+    if args.redo:
+        undo_mgr = UndoManager()
+        success, msg = undo_mgr.redo()
+        print(f"{'✅' if success else ''} {msg}")
+        return
+
+    # Mostrar estadísticas
     if args.stats:
-        organizer.show_stats()
-    else:
-        organizer.organize_all(simulate=args.simulate)
+        show_stats(config)
+        return
+
+    # Ejecutar organización normal
+    organize_files(config, simulate=args.simulate)
 
 
 if __name__ == "__main__":
