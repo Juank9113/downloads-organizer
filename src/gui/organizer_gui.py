@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Downloads Organizer Pro - GUI con estilo iOS
-Integración completa: Undo/Redo + Duplicados + Modo Interactivo con ventanas visuales
+Integración completa: Undo/Redo + Duplicados + Modo Interactivo + Dashboard
 """
 
 import tkinter as tk
@@ -78,36 +78,30 @@ class InteractiveDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        # Variable para la opción seleccionada
         self.selected_var = tk.IntVar(value=0)
         self.new_category_var = tk.StringVar(value="")
         self.new_category_entry = None
 
-        # Mensaje del prompt
         msg_label = ttk.Label(self, text="¿Qué deseas hacer con este archivo?", 
                               wraplength=450, font=("Segoe UI", 11, "bold"))
         msg_label.pack(pady=10, padx=20)
 
-        # Frame para las opciones
         options_frame = ttk.Frame(self)
         options_frame.pack(pady=5, padx=20, fill=tk.X)
 
-        # Crear radio buttons para cada opción
         for opt_num, opt_text in options:
             rb = ttk.Radiobutton(options_frame, text=opt_text, 
                                   variable=self.selected_var, value=opt_num,
                                   command=lambda n=opt_num: self._on_option_select(n))
             rb.pack(anchor=tk.W, pady=2, padx=10)
 
-        # Entry para nueva categoría (oculto por defecto)
         self.new_cat_frame = ttk.Frame(self)
         ttk.Label(self.new_cat_frame, text="Nombre de la nueva categoría:", 
                   font=("Segoe UI", 10)).pack(side=tk.LEFT, padx=10)
         self.new_category_entry = ttk.Entry(self.new_cat_frame, textvariable=self.new_category_var, width=25)
         self.new_category_entry.pack(side=tk.LEFT, padx=5)
-        self.new_cat_frame.pack_forget()  # Oculto inicialmente
+        self.new_cat_frame.pack_forget()
 
-        # Botones de acción
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=15)
 
@@ -116,7 +110,6 @@ class InteractiveDialog(tk.Toplevel):
         ttk.Button(btn_frame, text="Cancelar", command=self.cancel,
                    style="ios.TButton", width=12).pack(side=tk.LEFT, padx=5)
 
-        # Centrar ventana
         self.update_idletasks()
         width = self.winfo_width()
         height = self.winfo_height()
@@ -125,15 +118,12 @@ class InteractiveDialog(tk.Toplevel):
         self.geometry(f'+{x}+{y}')
 
     def _on_option_select(self, option_num):
-        """Maneja la selección de una opción."""
-        # Encontrar el número de "Crear nueva categoría"
         create_new_num = None
         for num, text in self.options:
             if "Crear nueva categoría" in text or "nueva categoría" in text.lower():
                 create_new_num = num
                 break
         
-        # Mostrar/ocultar el campo de nueva categoría
         if option_num == create_new_num:
             self.new_cat_frame.pack(pady=5)
             self.new_category_entry.focus_set()
@@ -141,13 +131,11 @@ class InteractiveDialog(tk.Toplevel):
             self.new_cat_frame.pack_forget()
 
     def send_response(self):
-        """Envía la respuesta al proceso."""
         selected = self.selected_var.get()
         if selected == 0:
             messagebox.showwarning("Sin selección", "Por favor, selecciona una opción.")
             return
         
-        # Verificar si es "Crear nueva categoría"
         create_new_num = None
         for num, text in self.options:
             if "Crear nueva categoría" in text or "nueva categoría" in text.lower():
@@ -159,14 +147,10 @@ class InteractiveDialog(tk.Toplevel):
             if not new_cat:
                 messagebox.showwarning("Campo vacío", "Por favor, escribe el nombre de la nueva categoría.")
                 return
-            # CORRECCIÓN: Enviar PRIMERO el número de la opción, LUEGO el nombre
             if self.process_stdin:
                 try:
-                    # Paso 1: Enviar el número de la opción
                     self.process_stdin.write(str(selected) + "\n")
                     self.process_stdin.flush()
-                    
-                    # Paso 2: Enviar el nombre de la nueva categoría
                     self.process_stdin.write(new_cat + "\n")
                     self.process_stdin.flush()
                 except Exception as e:
@@ -174,7 +158,6 @@ class InteractiveDialog(tk.Toplevel):
             self.destroy()
             return
         
-        # Enviar el número de la opción
         if self.process_stdin:
             try:
                 self.process_stdin.write(str(selected) + "\n")
@@ -184,7 +167,6 @@ class InteractiveDialog(tk.Toplevel):
         self.destroy()
 
     def cancel(self):
-        """Cancela y cierra el diálogo."""
         if self.process_stdin:
             try:
                 self.process_stdin.write("\n")
@@ -241,7 +223,7 @@ class RememberDialog(tk.Toplevel):
         self.destroy()
 
 
-# Toggle Switch (simplificado)
+# Toggle Switch
 class ToggleSwitch(ttk.Frame):
     def __init__(self, master, variable, command=None, tooltip_text=None, **kwargs):
         super().__init__(master, **kwargs)
@@ -365,7 +347,7 @@ class ThemeToggleSwitch(ttk.Frame):
                                 highlightthickness=0, bg=canvas_bg)
         self.canvas.pack(side=tk.LEFT, padx=5)
 
-        self.label_right = ttk.Label(container, text="🌙 Oscuro", font=("Segoe UI", 9))
+        self.label_right = ttk.Label(container, text=" Oscuro", font=("Segoe UI", 9))
         self.label_right.pack(side=tk.LEFT, padx=(8, 0))
 
         if tooltip_text:
@@ -449,8 +431,8 @@ class ThemeToggleSwitch(ttk.Frame):
 PERFILES = {
     "General": {"archivo": "config_default.json", "descripcion": "Organización estándar", "icono": ""},
     "Desarrollador": {"archivo": "config_dev.json", "descripcion": "Código y proyectos", "icono": "💻"},
-    "Estudiante": {"archivo": "estudiante.json", "descripcion": "Apuntes y tareas", "icono": "📚"},
-    "Diseñador": {"archivo": "disenador.json", "descripcion": "Fuentes e imágenes", "icono": "🎨"},
+    "Estudiante": {"archivo": "estudiante.json", "descripcion": "Apuntes y tareas", "icono": ""},
+    "Diseñador": {"archivo": "disenador.json", "descripcion": "Fuentes e imágenes", "icono": ""},
     "Profesional": {"archivo": "profesional.json", "descripcion": "Documentos laborales", "icono": "💼"},
     "Limpieza": {"archivo": "config_limpieza.json", "descripcion": "Limpieza profunda", "icono": ""},
     "Backup": {"archivo": "config_backup.json", "descripcion": "Respaldos", "icono": "💾"},
@@ -526,19 +508,39 @@ class DownloadsOrganizerGUI:
             self.root.after(100, self._update_undo_redo_panel)
 
     def on_closing(self):
-        """Terminar proceso hijo y cerrar GUI correctamente."""
-        if self.current_process and self.process_alive:
+        """Cerrar aplicación de forma FORZOSA y segura."""
+        print("\n🛑 === CERRANDO APLICACIÓN ===")
+        
+        # 1. Matar proceso hijo AGRESIVAMENTE
+        if self.current_process:
             try:
                 print("🛑 Terminando proceso hijo...")
-                self.current_process.terminate()
-                self.current_process.wait(timeout=2)
+                self.current_process.kill()
+                self.current_process.wait(timeout=1)
+                print("✅ Proceso hijo terminado")
             except Exception as e:
-                print(f"Error al terminar proceso: {e}")
-                try:
-                    self.current_process.kill()
-                except:
-                    pass
-        self.root.destroy()
+                print(f"⚠️ Proceso ya terminado o error: {e}")
+        
+        # 2. Cerrar undo_manager
+        if self.undo_manager and hasattr(self.undo_manager, 'close'):
+            try:
+                self.undo_manager.close()
+                print("✅ UndoManager cerrado")
+            except Exception as e:
+                print(f"⚠️ Error al cerrar UndoManager: {e}")
+        
+        # 3. Destruir ventana de forma forzada
+        try:
+            print("✅ Destruyendo ventana...")
+            self.root.quit()
+            self.root.destroy()
+            print("✅ Aplicación cerrada\n")
+        except Exception as e:
+            print(f"⚠️ Error al destruir: {e}")
+        
+        # 4. Forzar salida si algo queda colgado
+        import os
+        os._exit(0)
 
     def _load_preferences(self):
         try:
@@ -766,10 +768,28 @@ class DownloadsOrganizerGUI:
         self.interactive_info_label.pack_forget()
 
     def _create_stats_page(self, parent):
-        ttk.Button(parent, text="Cargar Estadísticas", command=self._load_stats,
-                   style="iosAccent.TButton", width=20).pack(pady=(0, 15))
+        main_btn_frame = ttk.Frame(parent)
+        main_btn_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        ttk.Button(main_btn_frame, text="📊 Abrir Dashboard Completo", 
+                   command=self._open_dashboard,
+                   style="iosAccent.TButton", width=25).pack(pady=5)
+        
+        ttk.Label(main_btn_frame, 
+                  text="Abre una ventana con gráficos interactivos, filtros y exportación",
+                  font=("Segoe UI", 9), bootstyle="secondary").pack()
+        
+        ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        
+        quick_frame = ttk.Frame(parent)
+        quick_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(quick_frame, text="Estadísticas Rápidas (texto):", 
+                  font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(quick_frame, text="Cargar", command=self._load_stats,
+                   style="ios.TButton", width=12).pack(side=tk.LEFT, padx=5)
 
-        stats_group = ttk.Labelframe(parent, text="  Información  ", padding=10)
+        stats_group = ttk.Labelframe(parent, text="  Información en texto  ", padding=10)
         stats_group.pack(fill=tk.BOTH, expand=True)
 
         self.stats_text = tk.Text(stats_group, wrap=tk.WORD, font=("Consolas", 10),
@@ -779,6 +799,37 @@ class DownloadsOrganizerGUI:
         self.stats_text.configure(yscrollcommand=scroll.set)
         self.stats_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def _open_dashboard(self):
+        """Abre la ventana del dashboard de estadísticas."""
+        print("\n📊 Abriendo dashboard...")
+        try:
+            print("📦 Importando módulos...")
+            from stats_dashboard import StatsDashboard
+            from db_manager import DatabaseManager
+            
+            print("🗄️ Creando DatabaseManager...")
+            db = DatabaseManager()
+            
+            print("🎨 Creando dashboard...")
+            dashboard = StatsDashboard(self.root, db_manager=db, 
+                                        is_dark_mode=self.dark_mode.get())
+            
+            print("✅ Dashboard creado correctamente")
+            dashboard.focus_set()
+            
+        except ImportError as e:
+            print(f"❌ Error de importación: {e}")
+            messagebox.showerror("Error de Importación", 
+                f"No se pudo cargar el módulo de estadísticas:\n{e}\n\n"
+                "Asegúrate de tener instalado matplotlib:\n"
+                "pip install matplotlib>=3.7.0")
+        except Exception as e:
+            print(f"❌ Error al abrir dashboard: {e}")
+            print(traceback.format_exc())
+            messagebox.showerror("Error al abrir dashboard", 
+                f"Error al abrir dashboard:\n{e}\n\n"
+                f"Detalles:\n{traceback.format_exc()}")
 
     def _create_duplicates_page(self, parent):
         print("   Iniciando creación de página de duplicados...")
@@ -1047,7 +1098,7 @@ class DownloadsOrganizerGUI:
                         try:
                             from send2trash import send2trash
                             send2trash(str(ruta))
-                            print(f"  ️ Movido a papelera: {ruta}")
+                            print(f"  🗑️ Movido a papelera: {ruta}")
                         except ImportError:
                             ruta.unlink()
                             print(f"  ❌ Eliminado: {ruta}")
@@ -1058,7 +1109,7 @@ class DownloadsOrganizerGUI:
                             pass
             except Exception as e:
                 error_msg = f"Error al eliminar {ruta}: {e}"
-                print(f"  ️ {error_msg}")
+                print(f"  ⚠️ {error_msg}")
                 resultados['errores'].append(error_msg)
         espacio_human = GrupoDuplicados._tamano_human(resultados['espacio_liberado'])
         modo_str = "SIMULACIÓN" if modo_simulacion else "REAL"
@@ -1066,7 +1117,7 @@ class DownloadsOrganizerGUI:
                    f"✅ Archivos procesados: {len(resultados['eliminados'])}\n"
                    f"💾 Espacio liberado: {espacio_human}")
         if resultados['errores']:
-            mensaje += f"\n\n️ Errores: {len(resultados['errores'])}"
+            mensaje += f"\n\n⚠️ Errores: {len(resultados['errores'])}"
         self.root.after(0, lambda: messagebox.showinfo("Resultado", mensaje))
         self.root.after(0, lambda: self.status_text.set(f"Eliminación completada: {len(resultados['eliminados'])} archivos"))
         self.root.after(500, self._activate_undo_after_delete)
@@ -1080,10 +1131,10 @@ class DownloadsOrganizerGUI:
                 undo_count = history['undo_count']
                 if self.last_delete_was_simulation:
                     self.undo_redo_label.config(
-                        text=f"️ Deshacer: 0 disponibles (simulación)  |  ↪️ Rehacer: 0 disponibles"
+                        text=f"↩️ Deshacer: 0 disponibles (simulación)  |  ↪️ Rehacer: 0 disponibles"
                     )
                     self.undo_button.config(state=tk.NORMAL)
-                    self.status_text.set(" Simulación completada. Puedes probar Deshacer (no hay cambios reales).")
+                    self.status_text.set("🧪 Simulación completada. Puedes probar Deshacer (no hay cambios reales).")
                     self.redo_button.config(state=tk.DISABLED)
                 else:
                     if undo_count > 0:
@@ -1196,7 +1247,7 @@ class DownloadsOrganizerGUI:
                 redo_count = history['redo_count']
                 undo_count = history['undo_count']
                 self.undo_redo_label.config(
-                    text=f"️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: {redo_count} disponibles"
+                    text=f"↩️ Deshacer: {undo_count} disponibles  |  ↪️ Rehacer: {redo_count} disponibles"
                 )
                 self.undo_button.config(state=tk.NORMAL if undo_count > 0 else tk.DISABLED)
                 self.redo_button.config(state=tk.NORMAL if redo_count > 0 else tk.DISABLED)
@@ -1242,13 +1293,13 @@ class DownloadsOrganizerGUI:
             success, msg = self.undo_manager.redo()
             self.root.after(0, lambda: self._handle_redo_result(success, msg, "Rehacer"))
         except Exception as e:
-            self.root.after(0, lambda: self.output_text.insert(tk.END, f" Error: {str(e)}\n"))
+            self.root.after(0, lambda: self.output_text.insert(tk.END, f"❌ Error: {str(e)}\n"))
             self.root.after(0, lambda: self.status_text.set("Error al rehacer"))
 
     def _handle_redo_result(self, success, msg, operation):
         icon = "✅" if success else "❌"
         self.output_text.insert(tk.END, f"{icon} {operation}: {msg}\n")
-        self.output_text.insert(tk.END, f"   ️ Los archivos han sido eliminados nuevamente\n\n")
+        self.output_text.insert(tk.END, f"   ⚠️ Los archivos han sido eliminados nuevamente\n\n")
         self.output_text.see(tk.END)
         self.status_text.set("Rehacer exitoso - Archivos eliminados permanentemente")
         if self.undo_manager:
@@ -1390,7 +1441,6 @@ class DownloadsOrganizerGUI:
             for line in self.current_process.stdout:
                 self.root.after(0, self._append_output, line)
 
-                # Detectar inicio del bloque de opciones
                 if "¿Qué deseas hacer" in line or "Qué deseas hacer" in line:
                     capturing = True
                     prompt_lines = [line]
@@ -1406,7 +1456,6 @@ class DownloadsOrganizerGUI:
                         prompt_lines = []
                         continue
 
-                # Detectar prompt de recordar
                 if "¿Recordar esta decisión" in line or "Recordar esta decisión" in line:
                     print(f"💾 Mostrando diálogo de recordar")
                     self.root.after(0, self._show_remember_dialog, line)
@@ -1432,7 +1481,6 @@ class DownloadsOrganizerGUI:
             self.process_alive = False
 
     def _show_interactive_dialog(self, prompt_text):
-        """Muestra el diálogo interactivo con radio buttons."""
         print(f"📋 Prompt recibido:\n{prompt_text}")
         options = []
         for line in prompt_text.splitlines():

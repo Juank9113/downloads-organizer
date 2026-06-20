@@ -1,7 +1,0 @@
-```markdown
-# Optional: for advanced features
-watchdog>=2.1.0  # Real-time monitoring
-click>=8.0.0     # CLI interface
-colorama>=0.4.4  # Colored output (Windows)
-pytest>=6.0.0    # Testing
-```

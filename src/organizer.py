@@ -9,6 +9,7 @@ Características:
 - Modo interactivo (--interactive) para archivos ambiguos.
 - Integración con sistema Undo/Redo (--undo / --redo).
 - Registro automático de movimientos en el historial.
+- Expansión correcta de rutas con ~ (home directory).
 
 Autor: Juan Carlos Blanco Ruiz
 """
@@ -29,13 +30,13 @@ sys.path.insert(0, str(current_dir))
 try:
     from undo_manager import UndoManager
 except ImportError:
-    print("⚠️ No se pudo importar undo_manager.py. Asegúrate de que esté en la misma carpeta.")
+    print("️ No se pudo importar undo_manager.py. Asegúrate de que esté en la misma carpeta.")
     sys.exit(1)
 
 try:
     from interactive_mode import InteractiveMode, process_interactive_files
 except ImportError:
-    print("️ No se pudo importar interactive_mode.py. Asegúrate de que esté en la misma carpeta.")
+    print("⚠️ No se pudo importar interactive_mode.py. Asegúrate de que esté en la misma carpeta.")
     InteractiveMode = None
     process_interactive_files = None
 
@@ -63,11 +64,33 @@ DEFAULT_CONFIG = {
 }
 
 
+def expand_path(path_str: str) -> Path:
+    """
+    Expande una ruta que puede contener ~ (home directory).
+    
+    :param path_str: Ruta como string (puede contener ~)
+    :return: Path expandido
+    """
+    return Path(path_str).expanduser().resolve()
+
+
 def load_config(config_path: str = None) -> dict:
-    """Carga la configuración desde un archivo JSON o usa la predeterminada."""
+    """
+    Carga la configuración desde un archivo JSON o usa la predeterminada.
+    Expande todas las rutas automáticamente.
+    """
     if config_path and Path(config_path).exists():
         with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+        
+        # Expandir rutas en la configuración
+        if "downloads_dir" in config:
+            config["downloads_dir"] = str(expand_path(config["downloads_dir"]))
+        if "organized_dir" in config:
+            config["organized_dir"] = str(expand_path(config["organized_dir"]))
+        
+        return config
+    
     return DEFAULT_CONFIG
 
 
@@ -82,8 +105,9 @@ def get_category(filename: str, categories: dict) -> str:
 
 def organize_files(config: dict, simulate: bool = False, interactive: bool = False):
     """Función principal para organizar los archivos."""
-    downloads_dir = Path(config["downloads_dir"])
-    organized_dir = Path(config["organized_dir"])
+    # CORRECCIÓN: Expandir rutas correctamente
+    downloads_dir = expand_path(config["downloads_dir"])
+    organized_dir = expand_path(config["organized_dir"])
     categories = config.get("categories", {})
 
     if not downloads_dir.exists():
@@ -101,7 +125,7 @@ def organize_files(config: dict, simulate: bool = False, interactive: bool = Fal
     interactive_mode = None
     if interactive and InteractiveMode:
         interactive_mode = InteractiveMode()
-        logger.info(" MODO INTERACTIVO ACTIVADO - Se preguntará por archivos ambiguos")
+        logger.info("🔧 MODO INTERACTIVO ACTIVADO - Se preguntará por archivos ambiguos")
 
     files_moved = 0
     files_skipped = 0
@@ -232,10 +256,11 @@ def organize_files(config: dict, simulate: bool = False, interactive: bool = Fal
 
 def show_stats(config: dict):
     """Muestra estadísticas básicas de las carpetas."""
-    downloads_dir = Path(config["downloads_dir"])
-    organized_dir = Path(config["organized_dir"])
+    # CORRECCIÓN: Expandir rutas correctamente
+    downloads_dir = expand_path(config["downloads_dir"])
+    organized_dir = expand_path(config["organized_dir"])
 
-    print(f"\n📊 ESTADÍSTICAS DEL SISTEMA")
+    print(f"\n ESTADÍSTICAS DEL SISTEMA")
     print(f"{'='*40}")
     
     if downloads_dir.exists():
@@ -256,7 +281,7 @@ def show_stats(config: dict):
             total_files += len([f for f in cat_files if f.is_file()])
             total_size += sum(f.stat().st_size for f in cat_files if f.is_file())
             
-        print(f"\n📂 Carpeta Organizada ({organized_dir.name}):")
+        print(f"\n Carpeta Organizada ({organized_dir.name}):")
         print(f"   - Categorías creadas: {len(categories)}")
         print(f"   - Archivos totales: {total_files}")
         print(f"   - Tamaño total: {total_size / (1024*1024):.2f} MB")
@@ -289,7 +314,7 @@ def main():
     if args.undo:
         undo_mgr = UndoManager()
         success, msg = undo_mgr.undo()
-        print(f"{'✅' if success else ''} {msg}")
+        print(f"{'✅' if success else '❌'} {msg}")
         return
 
     if args.redo:
